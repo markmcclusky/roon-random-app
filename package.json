@@ -1,0 +1,30 @@
+{
+  "name": "roon-random-app",
+  "version": "1.1.0",
+  "productName": "Roon Random Album",
+  "description": "Mac app to play a random Roon album with filters",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "make": "electron-forge make",
+    "package": "electron-forge package",
+    "publish": "electron-forge publish"
+  },
+  "dependencies": {
+    "electron-store": "^9.0.0",
+    "node-roon-api": "github:RoonLabs/node-roon-api",
+    "node-roon-api-browse": "github:RoonLabs/node-roon-api-browse",
+    "node-roon-api-image": "github:RoonLabs/node-roon-api-image",
+    "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.3",
+    "@electron-forge/maker-dmg": "^7.8.3",
+    "@electron-forge/maker-zip": "^7.8.3",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
+    "electron": "^30.5.1"
+  }
+}

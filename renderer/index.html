@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roon Random Album</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#fff; --fg:#0f172a; --muted:#64748b;
+      --border:#e5e7eb; --shadow:0 8px 24px rgba(15, 23, 42, 0.06);
+      --primary:#2563eb; --primary-ink:#fff; --ring:#93c5fd;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0f1115; --card:#11131a; --fg:#e7eaf0; --muted:#94a3b8;
+        --border:#232634; --shadow:0 10px 30px rgba(0,0,0,.35);
+        --primary:#60a5fa; --primary-ink:#0b1220; --ring:#1d4ed8;
+      }
+    }
+    html, body { height:100%; }
+    body{ margin:0; background:var(--bg); color:var(--fg);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .wrap{ max-width:1200px; margin:28px auto 40px; padding:0 20px; display: flex;
+  flex-direction: column;}
+  html, body, #root, .wrap {
+    height: 100%;
+    margin: 0;
+    overflow: hidden; /* Prevents the whole window from scrolling */
+  }
+	
+	.toolbar{ display:flex; align-items:center; gap:12px; background:linear-gradient(180deg, rgba(99,102,241,.08), transparent 70%);
+      border:1px solid var(--border); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow); }
+    .spacer{ flex:1; } .seg{ display:flex; align-items:center; gap:10px; } .divider{ width:1px; height:24px; background:var(--border); }
+    select, .btn{ height:34px; border-radius:9px; border:1px solid var(--border); background:var(--card); color:var(--fg); padding:0 10px; outline:none; }
+    .btn{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
+    .btn-primary{ background:var(--primary); color:var(--primary-ink); border-color:var(--primary); }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; } .btn:focus-visible{ box-shadow:0 0 0 3px var(--ring); }
+	.grid {
+	  display: grid;
+	  grid-template-columns: repeat(3, 1fr);
+	  gap: 20px;
+	  padding: 20px;
+	  flex-grow: 1; /* This is key: makes the grid fill all remaining space */
+	  min-height: 0;  /* A flexbox/grid trick to ensure proper sizing */
+	}
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
+    h1{ font-size:18px; margin:0 0 12px; } h2{ font-size:16px; margin:0 0 10px; } .muted{ color:var(--muted); }
+	.np {
+	  display: flex;
+	  gap: 20px;
+	  /* Tweak 1: Aligns the top of the album art with the top of the text block. */
+	  align-items: flex-start; 
+	}    .cover{ width:144px; height:144px; border-radius:12px; object-fit:cover; box-shadow:var(--shadow); }
+    .chipgrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    @media (min-width: 1100px){ .chipgrid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
+    .chip{ appearance:none; border:1px solid var(--border); background:var(--card); border-radius:9999px; padding:8px 12px; cursor:pointer; text-align:center; }
+    .chip.chip-active{ background:var(--primary); border-color:var(--primary); color:var(--primary-ink); }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .activity{ display:flex; flex-direction:column; gap:8px; }
+    .item{ display:flex; gap:10px; align-items:center; padding:8px; border-radius:10px; border:1px solid var(--border); }
+    .thumb{ width:48px; height:48px; border-radius:8px; object-fit:cover; background:var(--border); }
+    .title{ font-weight:600; } .time{ font-size:12px; color:var(--muted); } .list{ display:flex; flex-wrap:wrap; gap:6px; }
+    
+	.np-details {
+	  display: flex;
+	  flex-direction: column;
+	  justify-content: space-between;
+	  flex-grow: 1;
+	}
+
+	.transport-controls {
+	  display: flex;
+	  align-items: center;
+	  gap: 12px;
+	}
+
+	.btn-icon {
+	  background: transparent;
+	  border: none;
+	  padding: 4px;
+	  cursor: pointer;
+	  color: #555;
+	  border-radius: 50%;
+	  width: 44px; /* Increased from 36px */
+	  height: 44px; /* Increased from 36px */
+	  display: inline-flex;
+	  align-items: center;
+	  justify-content: center;
+	}
+
+	.btn-icon:hover {
+	  background-color: rgba(0,0,0,0.05);
+	}
+
+	.btn-icon:disabled {
+	  color: #bbb;
+	  cursor: not-allowed;
+	  background-color: transparent;
+	}
+
+	.btn-icon.btn-playpause {
+	  width: 56px; /* Increased from 48px */
+	  height: 56px; /* Increased from 48px */
+	  color: #333;
+	}
+	
+	.btn-link {
+	  background: none;
+	  border: none;
+	  color: #007aff; /* A standard blue link color */
+	  cursor: pointer;
+	  padding: 0;
+	  font-size: 13px;
+	  text-decoration: underline;
+	}
+
+	.btn-link:disabled {
+	  color: #8e8e93;
+	  text-decoration: none;
+	  cursor: not-allowed;
+	}
+	
+	/* Add this to your CSS file */
+	.controls-row {
+	  margin-top: 16px;
+	  display: flex;
+	  /* Tweak 2: Vertically centers the transport buttons with the volume slider. */
+	  align-items: center; 
+	  gap: 24px;
+	}
+
+	.volume-slider {
+	  flex-grow: 1;
+	  /* This tiny adjustment nudges the slider down to visually align with the buttons */
+	  transform: translateY(2px);
+	}
+	
+	.activity-card {
+	  display: flex;
+	  flex-direction: column;
+	  overflow: hidden; /* This is the key: it constrains the card's height */
+	}
+	
+	.activity {
+	  flex-grow: 1;         /* Allows the container to fill the available vertical space */
+	  overflow-y: auto;     /* Adds a scrollbar ONLY when content overflows */
+	  min-height: 0;          /* A flexbox trick to ensure scrolling works correctly */
+	}
+	
+	.spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.55); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="./index.js"></script>
+</body>
+</html>
