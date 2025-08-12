@@ -27,6 +27,8 @@ let transport = null;
 let zonesCache = [];
 let zonesRaw = [];
 let lastNPByZone = Object.create(null);
+let genresCache = null;
+let genresCacheTime = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -130,32 +132,44 @@ function browseAsync(opts) { return new Promise((res, rej) => browse.browse(opts
 function loadAsync(opts)   { return new Promise((res, rej) => browse.load(opts,   (e, out) => e ? rej(e) : res(out || {}))); }
 
 async function listGenres() {
-    if (!browse) throw new Error('Not connected to a Roon Core');
-    const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
-    async function loadAll(item_key) {
-        const names = [];
-        let offset = 0;
-        while (true) {
-            const page = await loadAsync({ hierarchy: 'browse', item_key, offset, count: 200 });
-            const arr = page.items || [];
-            if (!arr.length) break;
-            for (const it of arr) if (it?.title) names.push(it.title.trim());
-            offset += arr.length;
-        }
-        return Array.from(new Set(names)).sort((a,b)=>a.localeCompare(b));
+  // If we have a cache that's less than 1 hour old, return it immediately.
+  if (genresCache && (Date.now() - genresCacheTime < 3600 * 1000)) {
+    return genresCache;
+  }
+
+  if (!browse) throw new Error('Not connected to a Roon Core');
+  
+  const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
+  async function loadAll(item_key) {
+    const names = [];
+    let offset = 0;
+    while (true) {
+      const page = await loadAsync({ hierarchy: 'browse', item_key, offset, count: 200 });
+      const arr = page.items || [];
+      if (!arr.length) break;
+      for (const it of arr) if (it?.title) names.push(it.title.trim());
+      offset += arr.length;
     }
-    await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    const ciFind = (items, text) => {
-        const t = String(text).toLowerCase();
-        return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
-    };
-    let genresNode = ciFind(root.items, 'Genres') || null;
-    if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
-    await open(genresNode.item_key);
-    const names = await loadAll(genresNode.item_key);
-    if (!names.length) throw new Error('Genres page appears empty.');
-    return names;
+    return Array.from(new Set(names)).sort((a,b)=>a.localeCompare(b));
+  }
+
+  await browseAsync({ hierarchy: 'browse', pop_all: true });
+  const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+  const ciFind = (items, text) => {
+    const t = String(text).toLowerCase();
+    return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
+  };
+  let genresNode = ciFind(root.items, 'Genres') || null;
+  if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
+  await open(genresNode.item_key);
+  const names = await loadAll(genresNode.item_key);
+  if (!names.length) throw new Error('Genres page appears empty.');
+  
+  // Store the result in our cache before returning.
+  genresCache = names;
+  genresCacheTime = Date.now();
+  
+  return names;
 }
 
 
