@@ -41,60 +41,68 @@
     var _genres=React.useState([]); var genres=_genres[0],setGenres=_genres[1];
     var _busy=React.useState(false); var busy=_busy[0],setBusy=_busy[1];
     
-    async function refreshState(){ try{ var s=await window.roon.getState(); setState(s);}catch(_){} }
-    async function refreshZones(){ try{ var z=await window.roon.listZones(); setZones(Array.isArray(z)?z:[]);}catch(_){} }
-    async function refreshGenres(){ try{ var g=await window.roon.listGenres(); setGenres(Array.isArray(g)?g:[]);}catch(_){} }
-    async function setFilters(next){ try{ await window.roon.setFilters(next||{}); await refreshState(); }catch(_){} }
-    async function selectZone(zoneId){ try{ await window.roon.selectZone(zoneId); await refreshState(); }catch(_){} }
+    async function refreshState(){ try { var s = await window.roon.getState(); setState(s); } catch (err) { console.error('Failed to get state:', err); } }
+    async function refreshZones(){ try { var z = await window.roon.listZones(); setZones(Array.isArray(z) ? z : []); } catch (err) { console.error('Failed to list zones:', err); } }
+    async function refreshGenres(){ try { var g = await window.roon.listGenres(); setGenres(Array.isArray(g) ? g : []); } catch (err) { console.error('Failed to list genres:', err); } }
+    async function setFilters(next){ try { await window.roon.setFilters(next || {}); await refreshState(); } catch (err) { console.error('Failed to set filters:', err); } }
+    async function selectZone(zoneId){ try { await window.roon.selectZone(zoneId); await refreshState(); } catch (err) { console.error('Failed to select zone:', err); } }
     async function playRandom(genres){
       setBusy(true);
-      try{
+      try {
         const result = await window.roon.playRandomAlbum(genres);
         return result;
-      }catch(e){
-        console.error(e);
+      } catch (e){
+        console.error('Failed to play random album:', e);
         return null;
-      } finally{
+      } finally {
         setBusy(false);
       }
     }
-    async function transportControl(action) { try { await window.roon.transportControl(action); } catch(err) { console.error('Transport failed', err); } }
-    async function changeVolume(value) { try { await window.roon.changeVolume(value); } catch(err) { console.error('Volume change failed', err); } }
+    async function transportControl(action) { try { await window.roon.transportControl(action); } catch (err) { console.error('Transport failed:', err); } }
+    async function changeVolume(value) { try { await window.roon.changeVolume(value); } catch (err) { console.error('Volume change failed:', err); } }
     
-    React.useEffect(function(){
-      (async function(){ await refreshState(); await refreshZones(); await refreshGenres(); })();
-      window.roon.onEvent(function(payload){
-        if(!payload)return;
-        if(payload.type==='core'||payload.type==='zones'){refreshState();refreshZones();}
-      });
-    },[]);
+	React.useEffect(function(){
+	  // Initial data fetch remains the same
+	  (async function(){ await refreshState(); await refreshZones(); await refreshGenres(); })();
+  
+	  // New, more efficient event handler
+	  window.roon.onEvent(function(payload){
+	    if (!payload) return;
+    
+	    // Update state directly from the payload's data
+	    if (payload.type === 'core') {
+	      setState(prevState => ({ ...prevState, paired: payload.status === 'paired', coreName: payload.coreDisplayName }));
+	    } else if (payload.type === 'zones') {
+	      setZones(payload.zones || []);
+	    }
+	    // The nowPlaying event is handled by a different useEffect, so we don't need to touch it here.
+	  });
+	},[]);
     
     return { state,zones,genres,busy,refreshGenres,setFilters,selectZone,playRandom,transportControl,changeVolume };
   }
 
   function Genres(props){
-      var all=props.all, selected=props.selected, setSelected=props.setSelected;
-      var _reloading=React.useState(false); var reloading=_reloading[0],setReloading=_reloading[1];
+    var all=props.all, selected=props.selected, setSelected=props.setSelected;
+    var _reloading=React.useState(false); var reloading=_reloading[0],setReloading=_reloading[1];
     
-      function toggle(g){ setSelected(p => { var s=new Set(p); if(s.has(g))s.delete(g); else s.add(g); return Array.from(s); }); }
-      async function clearAll(){ setSelected([]); }
-      async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
+    function toggle(g){ setSelected(p => { var s=new Set(p); if(s.has(g))s.delete(g); else s.add(g); return Array.from(s); }); }
+    async function clearAll(){ setSelected([]); }
+    async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
     
-      return e('div',{className:'card'},
-        // 1. Title changed and Reload Genres is now a small text link
-        e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
-          e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
-          e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
-        ),
+    return e('div',{className:'card'},
+      e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
+        e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
+        e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
+      ),
       
-        e('div',{className:'chipgrid'}, all.map(function(g){ var active=selected.includes(g); var cls='chip'+(active?' chip-active':''); return e('button',{key:g,className:cls,onClick:()=>toggle(g),disabled:reloading},g);})),
+      e('div',{className:'chipgrid'}, all.map(function(g){ var active=selected.includes(g); var cls='chip'+(active?' chip-active':''); return e('button',{key:g,className:cls,onClick:()=>toggle(g),disabled:reloading},g);})),
       
-        // 3. "Clear" button is now at the bottom with a new name
-        e('div', { className: 'row', style: { marginTop: 12 } },
-          e('button',{className:'btn', onClick:clearAll, disabled:reloading}, 'Clear Genre Selections')
-        )
-      );
-    }
+      e('div', { className: 'row', style: { marginTop: 12 } },
+        e('button',{className:'btn', onClick:clearAll, disabled:reloading}, 'Clear Genre Selections')
+      )
+    );
+  }
 
   function App(){
     var roon=useRoon();
@@ -131,7 +139,9 @@
             const dataUrl = await window.roon.getImage(meta.image_key);
             if (dataUrl) setNowPlaying(p => ({...p, art: dataUrl}));
           }
-        } catch(e){}
+        } catch(e){
+          console.error('Failed to get Now Playing for new zone:', e);
+        }
       })();
     }, [roon.state.lastZoneId]);
     
