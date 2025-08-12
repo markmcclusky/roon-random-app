@@ -1,14 +1,13 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+// main.js
+import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import Store from 'electron-store';
-import RoonApi from 'node-roon-api';
-import RoonApiBrowse from 'node-roon-api-browse';
-import RoonApiTransport from 'node-roon-api-transport';
-import RoonApiImage from 'node-roon-api-image';
 import { fileURLToPath } from 'url';
+import { initialize as initializeRoonService } from './roonService.js';
+import { registerIpcHandlers } from './ipcHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 const store = new Store({
   name: 'config',
@@ -20,15 +19,6 @@ const store = new Store({
 });
 
 let mainWindow;
-let roon = null;
-let core = null;
-let browse = null;
-let transport = null;
-let zonesCache = [];
-let zonesRaw = [];
-let lastNPByZone = Object.create(null);
-let genresCache = null;
-let genresCacheTime = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -46,305 +36,25 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
- // mainWindow.webContents.once('dom-ready', () => mainWindow.webContents.openDevTools({ mode: 'detach' }));
-  
+  // mainWindow.webContents.once('dom-ready', () => mainWindow.webContents.openDevTools({ mode: 'detach' }));
 }
-
-function connectToRoon() {
-  roon = new RoonApi({
-    extension_id: 'com.markmcc.roonrandom',
-    display_name: 'Roon Random Album',
-    display_version: app.getVersion(),
-    publisher: 'Mark McClusky',
-    email: 'mark@example.com',
-    website: 'https://example.com',
-    log_level: 'none',
-    token: store.get('token'),
-    save_token: (token) => store.set('token', token),
-
-    core_paired: (_core) => {
-      core      = _core;
-      browse    = core.services.RoonApiBrowse;
-      transport = core.services.RoonApiTransport;
-
-      transport.subscribe_zones((resp, data) => {
-        if (resp === 'Subscribed') {
-          zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
-        } else if (resp === 'Changed') {
-          if (Array.isArray(data?.zones)) {
-            zonesRaw = data.zones;
-          } else if (Array.isArray(data?.zones_changed)) {
-            const byId = new Map(zonesRaw.map(z => [z.zone_id, z]));
-            data.zones_changed.forEach(z => byId.set(z.zone_id, z));
-            zonesRaw = Array.from(byId.values());
-          }
-        }
-        zonesCache = zonesRaw.map(z => ({ id: z.zone_id, name: z.display_name, state: z.state, volume: z.outputs && z.outputs[0] ? z.outputs[0].volume : null }));
-        ensureLastZoneSelected();
-        emitZones();
-        const zid = store.get('lastZoneId');
-        const np = getZoneNowPlaying(zid);
-        if (np) maybeEmitNowPlaying(zid, np);
-      });
-      emitEvent({ type: 'core', status: 'paired', coreDisplayName: core.display_name });
-    },
-
-    core_unpaired: () => {
-      emitEvent({ type: 'core', status: 'unpaired' });
-      core = null; browse = null; transport = null;
-      zonesCache = [];
-      emitZones();
-    }
-  });
-
-  roon.init_services({ required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage] });
-  roon.start_discovery();
-}
-
-function ensureLastZoneSelected() {
-  if (!store.get('lastZoneId') && zonesCache.length) {
-    store.set('lastZoneId', zonesCache[0].id);
-  }
-}
-
-function emitEvent(payload) { if (mainWindow?.webContents) mainWindow.webContents.send('roon:event', payload); }
-function emitZones() { emitEvent({ type: 'zones', zones: zonesCache }); }
-
-function getFilters() { return store.get('filters'); }
-function setFilters(filters) {
-  const current = getFilters();
-  let nextGenres;
-  if (Array.isArray(filters?.genres)) {
-    nextGenres = filters.genres.map(s => String(s).trim()).filter(Boolean);
-  } else if (filters && Object.prototype.hasOwnProperty.call(filters, 'genres')) {
-    nextGenres = [];
-  } else {
-    nextGenres = Array.isArray(current?.genres) ? current.genres : [];
-  }
-  const next = { genres: nextGenres };
-  store.set('filters', next);
-  emitEvent({ type: 'filters', filters: next });
-  return next;
-}
-function setLastZone(id) { store.set('lastZoneId', id || null); }
-
-function browseAsync(opts) { return new Promise((res, rej) => browse.browse(opts, (e, out) => e ? rej(e) : res(out || {}))); }
-function loadAsync(opts)   { return new Promise((res, rej) => browse.load(opts,   (e, out) => e ? rej(e) : res(out || {}))); }
-
-async function listGenres() {
-  // If we have a cache that's less than 1 hour old, return it immediately.
-  if (genresCache && (Date.now() - genresCacheTime < 3600 * 1000)) {
-    return genresCache;
-  }
-
-  if (!browse) throw new Error('Not connected to a Roon Core');
-  
-  const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
-  async function loadAll(item_key) {
-    const names = [];
-    let offset = 0;
-    while (true) {
-      const page = await loadAsync({ hierarchy: 'browse', item_key, offset, count: 200 });
-      const arr = page.items || [];
-      if (!arr.length) break;
-      for (const it of arr) if (it?.title) names.push(it.title.trim());
-      offset += arr.length;
-    }
-    return Array.from(new Set(names)).sort((a,b)=>a.localeCompare(b));
-  }
-
-  await browseAsync({ hierarchy: 'browse', pop_all: true });
-  const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  const ciFind = (items, text) => {
-    const t = String(text).toLowerCase();
-    return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
-  };
-  let genresNode = ciFind(root.items, 'Genres') || null;
-  if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
-  await open(genresNode.item_key);
-  const names = await loadAll(genresNode.item_key);
-  if (!names.length) throw new Error('Genres page appears empty.');
-  
-  // Store the result in our cache before returning.
-  genresCache = names;
-  genresCacheTime = Date.now();
-  
-  return names;
-}
-
-
-
-async function pickRandomAlbumAndPlay(genres = []) {
-    if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
-    const zones = zonesCache;
-    let chosenZoneId = store.get('lastZoneId');
-    if (!chosenZoneId || !zones.some(z => z.id === chosenZoneId)) {
-        chosenZoneId = zones[0]?.id || null;
-        if (chosenZoneId) store.set('lastZoneId', chosenZoneId);
-    }
-    if (!chosenZoneId) throw new Error('No output zones available.');
-    try { transport.change_zone(chosenZoneId); } catch {}
-    
-    const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
-    const ciFind = (items, text) => {
-        const t = String(text).toLowerCase();
-        return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
-    };
-    await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    let targetKey = null;
-
-    if (Array.isArray(genres) && genres.length > 0) {
-        const genresNode = ciFind(root.items, 'Genres');
-        if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
-        await open(genresNode.item_key);
-        const wanted = genres[Math.floor(Math.random() * genres.length)];
-        const wantedLower = wanted.toLowerCase();
-        let genreRow = null, offset = 0;
-        while (!genreRow) {
-            const page = await loadAsync({ hierarchy: 'browse', item_key: genresNode.item_key, offset, count: 200 });
-            const items = page.items || [];
-            if (!items.length) break;
-            genreRow = items.find(i => (i.title || '').trim().toLowerCase() === wantedLower) || items.find(i => (i.title || '').toLowerCase().includes(wantedLower));
-            offset += items.length;
-        }
-        if (!genreRow?.item_key) throw new Error(`Genre '${wanted}' not found.`);
-        await open(genreRow.item_key);
-        const gPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-        const albumsNode = ciFind(gPage.items, 'Albums') || ciFind(gPage.items, 'All Albums') || ciFind(gPage.items, 'Library Albums');
-        if (albumsNode?.item_key) {
-            await open(albumsNode.item_key);
-            targetKey = albumsNode.item_key;
-        } else {
-            targetKey = genreRow.item_key;
-        }
-    } else {
-        const library = ciFind(root.items, 'Library');
-        if (!library?.item_key) throw new Error("No 'Library' at root");
-        await open(library.item_key);
-        const lib = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-        const albums = ciFind(lib.items, 'Albums');
-        if (!albums?.item_key) throw new Error("No 'Albums' under Library");
-        await open(albums.item_key);
-        targetKey = albums.item_key;
-    }
-    const header = await browseAsync({ hierarchy: 'browse' });
-    const total = header?.list?.count ?? 0;
-    let picked;
-    if (total > 0) {
-        const idx = Math.floor(Math.random() * total);
-        const one = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: idx, count: 1 });
-        picked = one.items?.[0] || null;
-    } else {
-        const page = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: 0, count: 200 });
-        const items = (page.items || []).filter(Boolean);
-        if (!items.length) throw new Error('Albums list empty');
-        picked = items[Math.floor(Math.random() * items.length)];
-    }
-    if (!picked?.item_key) throw new Error('Failed to pick album');
-    await open(picked.item_key);
-    const albumPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 200 });
-    let artKey = picked?.image_key || albumPage?.list?.image_key || null;
-    if (!artKey) {
-        const maybe = (albumPage?.items || []).find(i => i && i.image_key);
-        if (maybe) artKey = maybe.image_key;
-    }
-    if (artKey && !picked.image_key) picked.image_key = artKey;
-    const playAlbum = (albumPage.items || []).find(i => i.title === 'Play Album' && i.hint === 'action_list');
-    if (playAlbum?.item_key) {
-        await browseAsync({ hierarchy: 'browse', item_key: playAlbum.item_key, zone_or_output_id: chosenZoneId });
-        const actions = await loadAsync({ hierarchy: 'browse', offset: 0, count: 20 });
-        const actionItem = (actions.items || []).find(i => /play\s*now/i.test(i.title || '')) || (actions.items || [])[0];
-        if (!actionItem?.item_key) throw new Error('No playable action');
-        await browseAsync({ hierarchy: 'browse', item_key: actionItem.item_key, zone_or_output_id: chosenZoneId });
-    } else {
-        await new Promise((res, rej) => transport.play_from_here({ zone_or_output_id: chosenZoneId }, e => e ? rej(e) : res()));
-    }
-
-    return {
-        album: picked.title,
-        artist: picked.subtitle,
-        image_key: artKey
-    };
-}
-
-
-
-function getImageDataUrl(image_key, opts = {}) {
-    return new Promise((resolve) => {
-        if (!core || !image_key) return resolve(null);
-        const img = core.services.RoonApiImage;
-        if (!img) return resolve(null);
-        img.get_image(image_key, { scale: opts.scale || 'fit', width: opts.width || 256, height: opts.height || 256, format: opts.format || 'image/jpeg' }, (err, contentType, body) => {
-            if (err || !body) return resolve(null);
-            const b64 = Buffer.from(body).toString('base64');
-            resolve(`data:${contentType};base64,${b64}`);
-        });
-    });
-}
-function getZoneNowPlaying(zoneId) {
-  const z = (zonesRaw || []).find(zz => zz.zone_id === zoneId);
-  if (!z || !z.now_playing) return null;
-  const np = z.now_playing;
-
-  // Correctly extract song, artist, and album from the three_line object
-  const song = np?.three_line?.line1 || null;
-  const artist = np?.three_line?.line2 || null;
-  const album = np?.three_line?.line3 || null;
-  
-  return { song, artist, album, image_key: np?.image_key || null };
-}
-function maybeEmitNowPlaying(zoneId, meta) {
-  if (!zoneId || !meta) return;
-  const key = [meta.song, meta.artist, meta.album].join('||');
-  if (lastNPByZone[zoneId] === key) return;
-  lastNPByZone[zoneId] = key;
-  emitEvent({ type: 'nowPlaying', meta });
-}
-
-// IPC HANDLERS
-ipcMain.handle('roon:getState', () => ({ paired: !!core, coreName: core?.display_name, lastZoneId: store.get('lastZoneId'), filters: getFilters() }));
-ipcMain.handle('roon:listZones', () => zonesCache);
-ipcMain.handle('roon:selectZone', (_evt, zoneId) => { setLastZone(zoneId); const meta = getZoneNowPlaying(zoneId); if (meta) maybeEmitNowPlaying(zoneId, meta); });
-ipcMain.handle('roon:getFilters', () => getFilters());
-ipcMain.handle('roon:setFilters', (_evt, filters) => setFilters(filters));
-ipcMain.handle('roon:listGenres', () => listGenres());
-ipcMain.handle('roon:playRandomAlbum', (_evt, genres) => pickRandomAlbumAndPlay(genres));
-ipcMain.handle('roon:getImage', (_evt, key, opts) => getImageDataUrl(key, opts));
-ipcMain.handle('roon:getZoneNowPlaying', (_evt, zoneId) => getZoneNowPlaying(zoneId));
-
-ipcMain.handle('roon:transport:control', (_evt, action) => {
-  return new Promise((resolve, reject) => {
-    const zone = zonesRaw.find(z => z.zone_id === store.get('lastZoneId'));
-    if (!zone) return reject(new Error('Zone not found'));
-    transport.control(zone, action, (err) => err ? reject(err) : resolve());
-  });
-});
-
-ipcMain.handle('roon:changeVolume', (_evt, value) => {
-  return new Promise((resolve, reject) => {
-    const zone = zonesRaw.find(z => z.zone_id === store.get('lastZoneId'));
-    const output = zone?.outputs?.[0];
-    if (!output?.volume) return reject(new Error('Output not found or has no volume control.'));
-    
-    // Define the three separate arguments
-    const how = 'absolute';
-    const newVolume = parseInt(value, 10);
-    
-    // Call the function with the correct three arguments
-    transport.change_volume(output, how, newVolume, (err) => {
-      if (err) {
-        console.error(`Volume change failed:`, err);
-        return reject(new Error(`Volume change failed: ${err}`));
-      }
-      return resolve({ success: true });
-    });
-  });
-});
 
 app.whenReady().then(() => {
   createWindow();
-  connectToRoon();
+
+  // Initialize our new modules
+  initializeRoonService(mainWindow, store);
+  registerIpcHandlers(store);
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
