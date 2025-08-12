@@ -76,35 +76,42 @@
 	  gap: 12px;
 	}
 
-	.btn-icon {
-	  background: transparent;
-	  border: none;
-	  padding: 4px;
-	  cursor: pointer;
-	  color: #555;
-	  border-radius: 50%;
-	  width: 44px; /* Increased from 36px */
-	  height: 44px; /* Increased from 36px */
-	  display: inline-flex;
-	  align-items: center;
-	  justify-content: center;
-	}
+    .btn-icon {
+      /* Remove all default button appearance */
+      appearance: none;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
 
-	.btn-icon:hover {
-	  background-color: rgba(0,0,0,0.05);
-	}
+      /* Let the button shrink to fit the image */
+      line-height: 0; 
+    }
 
-	.btn-icon:disabled {
-	  color: #bbb;
-	  cursor: not-allowed;
-	  background-color: transparent;
-	}
+    .btn-icon img {
+      width: 36px;  /* Icon size defines the button size */
+      height: 36px;
+      object-fit: contain;
+      transition: opacity 0.15s ease-in-out;
+    }
 
-	.btn-icon.btn-playpause {
-	  width: 56px; /* Increased from 48px */
-	  height: 56px; /* Increased from 48px */
-	  color: #333;
-	}
+    .btn-icon:hover img {
+      opacity: 0.7;
+    }
+
+    .btn-icon:disabled {
+      cursor: not-allowed;
+    }
+
+    .btn-icon:disabled img {
+      opacity: 0.4;
+    }
+
+    /* The play/pause icon is larger */
+    .btn-icon.btn-playpause img {
+      width: 36px;
+      height: 36px;
+    }
 	
 	.btn-link {
 	  background: none;

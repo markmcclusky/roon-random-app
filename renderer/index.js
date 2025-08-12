@@ -12,26 +12,6 @@
       e('circle', { cx:9, cy:15, r:1.4, fill:'currentColor' })
     );
   }
-  function PlayIcon(props) {
-    return e('svg', Object.assign({ width: 32, height: 32, viewBox: '0 0 24 24', fill: 'currentColor' }, props),
-      e('path', { d: 'M8 5v14l11-7z' })
-    );
-  }
-  function PauseIcon(props) {
-    return e('svg', Object.assign({ width: 32, height: 32, viewBox: '0 0 24 24', fill: 'currentColor' }, props),
-      e('path', { d: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z' })
-    );
-  }
-  function PreviousIcon(props) {
-    return e('svg', Object.assign({ width: 24, height: 24, viewBox: '0 0 24 24', fill: 'currentColor' }, props),
-      e('path', { d: 'M6 6h2v12H6zm3.5 6l8.5 6V6z' })
-    );
-  }
-  function NextIcon(props) {
-    return e('svg', Object.assign({ width: 24, height: 24, viewBox: '0 0 24 24', fill: 'currentColor' }, props),
-      e('path', { d: 'M16 6h2v12h-2zm-4.5 6l-8.5 6V6z' })
-    );
-  }
 
   function relTime(ts){ var d=Date.now()-ts, m=Math.round(d/60000); if(m<1)return'just now'; if(m<60)return m+'m ago'; var h=Math.round(m/60); return h+'h ago'; }
 
@@ -181,33 +161,42 @@
     var isPlaying = currentZone && currentZone.state === 'playing';
     var hasVolumeControl = currentZone && currentZone.volume && currentZone.volume.type === 'number';
 
-    var npCard = e('div', { className: 'card' },
-      e('h2', null, 'Now Playing'),
-      e('div', { className: 'np' },
-        nowPlaying.art ? e('img', { className: 'cover', src: nowPlaying.art, alt:'Album art' }) : e('div', {className: 'cover'}),
-        e('div', { className: 'np-details' },
-          e('div', null,
-            e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } }, nowPlaying.song || '—'),
-            e('div', { style: { fontWeight: 700, marginBottom: 4 } }, nowPlaying.album || ''),
-            e('div', { className: 'muted', style: { fontSize: 15 } }, nowPlaying.artist || '')
+// In renderer/index.js, inside the App() function...
+
+var npCard = e('div', { className: 'card' },
+  e('h2', null, 'Now Playing'),
+  e('div', { className: 'np' },
+    nowPlaying.art ? e('img', { className: 'cover', src: nowPlaying.art, alt:'Album art' }) : e('div', {className: 'cover'}),
+    e('div', { className: 'np-details' },
+      e('div', null,
+        e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } }, nowPlaying.song || '—'),
+        e('div', { style: { fontWeight: 700, marginBottom: 4 } }, nowPlaying.album || ''),
+        e('div', { className: 'muted', style: { fontSize: 15 } }, nowPlaying.artist || '')
+      ),
+      e('div', { className: 'controls-row' },
+        e('div', { className: 'transport-controls' },
+          // MODIFICATION: Replace SVGs with <img> tags
+          e('button', { className: 'btn-icon', onClick: () => roon.transportControl('previous') }, 
+            e('img', { src: './images/previous-100.png', alt: 'Previous' })
           ),
-          e('div', { className: 'controls-row' },
-            e('div', { className: 'transport-controls' },
-              e('button', { className: 'btn-icon', onClick: () => roon.transportControl('previous') }, e(PreviousIcon)),
-              e('button', { className: 'btn-icon btn-playpause', onClick: () => roon.transportControl('playpause') }, e(isPlaying ? PauseIcon : PlayIcon)),
-              e('button', { className: 'btn-icon', onClick: () => roon.transportControl('next') }, e(NextIcon))
-            ),
-            hasVolumeControl ? e('input', {
-              className: 'volume-slider', type: 'range',
-              min: currentZone.volume.min, max: currentZone.volume.max, step: currentZone.volume.step,
-              value: localVolume !== null ? localVolume : currentZone.volume.value,
-              onInput: (ev) => setLocalVolume(ev.target.value),
-              onChange: (ev) => roon.changeVolume(ev.target.value)
-            }) : null
+          e('button', { className: 'btn-icon btn-playpause', onClick: () => roon.transportControl('playpause') }, 
+            e('img', { src: isPlaying ? './images/pause-100.png' : './images/play-100.png', alt: 'Play/Pause' })
+          ),
+          e('button', { className: 'btn-icon', onClick: () => roon.transportControl('next') }, 
+            e('img', { src: './images/next-100.png', alt: 'Next' })
           )
-        )
+        ),
+        hasVolumeControl ? e('input', {
+          className: 'volume-slider', type: 'range',
+          min: currentZone.volume.min, max: currentZone.volume.max, step: currentZone.volume.step,
+          value: localVolume !== null ? localVolume : currentZone.volume.value,
+          onInput: (ev) => setLocalVolume(ev.target.value),
+          onChange: (ev) => roon.changeVolume(ev.target.value)
+        }) : null
       )
-    );
+    )
+  )
+);
 
     var genresCard=e(Genres,{roon:roon, all:roon.genres, selected:selected, setSelected:setSelected});
 
