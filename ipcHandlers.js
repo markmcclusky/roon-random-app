@@ -14,18 +14,17 @@ export function registerIpcHandlers(store) {
 
   ipcMain.handle('roon:selectZone', (_evt, zoneId) => {
     RoonService.setLastZone(zoneId);
-    const meta = RoonService.getZoneNowPlaying(zoneId);
-    if (meta) {
-      // Since maybeEmitNowPlaying is not exported, we call getZoneNowPlaying and then emit
-      // For simplicity, we just trigger a check on the frontend after selection
-    }
   });
 
   ipcMain.handle('roon:getFilters', () => RoonService.getFilters());
   ipcMain.handle('roon:setFilters', (_evt, filters) => RoonService.setFilters(filters));
   ipcMain.handle('roon:listGenres', () => RoonService.listGenres());
   ipcMain.handle('roon:playRandomAlbum', (_evt, genres) => RoonService.pickRandomAlbumAndPlay(genres));
-  ipcMain.handle('roon:playAlbumByName', (_evt, album, artist) => RoonService.playAlbumByName(album, artist)); 
+  ipcMain.handle('roon:playAlbumByName', (_evt, album, artist) => RoonService.playAlbumByName(album, artist));
+  
+  // This is a direct call, with no lock.
+  ipcMain.handle('roon:playRandomAlbumByArtist', (_evt, artist, currentAlbum) => RoonService.playRandomAlbumByArtist(artist, currentAlbum));
+
   ipcMain.handle('roon:getImage', (_evt, key, opts) => RoonService.getImageDataUrl(key, opts));
   ipcMain.handle('roon:getZoneNowPlaying', (_evt, zoneId) => RoonService.getZoneNowPlaying(zoneId));
 
