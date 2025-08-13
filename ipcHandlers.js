@@ -25,6 +25,7 @@ export function registerIpcHandlers(store) {
   ipcMain.handle('roon:setFilters', (_evt, filters) => RoonService.setFilters(filters));
   ipcMain.handle('roon:listGenres', () => RoonService.listGenres());
   ipcMain.handle('roon:playRandomAlbum', (_evt, genres) => RoonService.pickRandomAlbumAndPlay(genres));
+  ipcMain.handle('roon:playAlbumByName', (_evt, album, artist) => RoonService.playAlbumByName(album, artist)); 
   ipcMain.handle('roon:getImage', (_evt, key, opts) => RoonService.getImageDataUrl(key, opts));
   ipcMain.handle('roon:getZoneNowPlaying', (_evt, zoneId) => RoonService.getZoneNowPlaying(zoneId));
 

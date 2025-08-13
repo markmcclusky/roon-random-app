@@ -6,10 +6,11 @@
   function DiceIcon(props){
     return e('svg', Object.assign({ width:16, height:16, viewBox:'0 0 24 24', fill:'none' }, props),
       e('rect', { x:3, y:3, width:18, height:18, rx:4, stroke:'currentColor', 'stroke-width':1.6 }),
-      e('circle', { cx:9, cy:9, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:15, cy:15, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:15, cy:9, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:9, cy:15, r:1.4, fill:'currentColor' })
+      e('circle', { cx:8, cy:8, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:16, cy:16, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:16, cy:8, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:8, cy:16, r:1.4, fill:'currentColor' }),    
+      e('circle', { cx:12, cy:12, r:1.4, fill:'currentColor' })
     );
   }
 
@@ -62,27 +63,57 @@
     return { state,zones,genres,busy,refreshGenres,setFilters,selectZone,playRandom,transportControl,changeVolume };
   }
 
+
+  // renderer/index.js
+
   function Genres(props){
-    var all=props.all, selected=props.selected, setSelected=props.setSelected;
-    var _reloading=React.useState(false); var reloading=_reloading[0],setReloading=_reloading[1];
-    
-    function toggle(g){ setSelected(p => { var s=new Set(p); if(s.has(g))s.delete(g); else s.add(g); return Array.from(s); }); }
-    async function clearAll(){ setSelected([]); }
-    async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
-    
-    return e('div',{className:'card'},
-      e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
-        e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
-        e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
-      ),
-      
-      e('div',{className:'chipgrid'}, all.map(function(g){ var active=selected.includes(g); var cls='chip'+(active?' chip-active':''); return e('button',{key:g,className:cls,onClick:()=>toggle(g),disabled:reloading},g);})),
-      
-      e('div', { className: 'row', style: { marginTop: 12 } },
-        e('button',{className:'btn', onClick:clearAll, disabled:reloading}, 'Clear Genre Selections')
-      )
-    );
-  }
+      var all = props.all, selected = props.selected, setSelected = props.setSelected;
+      var _reloading = React.useState(false); var reloading = _reloading[0], setReloading = _reloading[1];
+
+      function toggle(genreTitle){ // Now accepts the genre title string
+        if (reloading) return;
+        setSelected(p => {
+          var s = new Set(p);
+          if (s.has(genreTitle)) s.delete(genreTitle);
+          else s.add(genreTitle);
+          return Array.from(s);
+        });
+      }
+
+      async function clearAll(){ setSelected([]); }
+      async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
+
+      return e('div',{className:'card activity-card'},
+        e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexShrink: 0 } },
+          e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
+          e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
+        ),
+
+        e('div', { className: 'genre-card-content' },
+          e('div', { className: 'toggle-list' },
+            all.map(function(genre) { // 'genre' is now an object { title, albumCount }
+              var active = selected.includes(genre.title);
+              return e('div', {
+                key: genre.title, // Use the title as the key
+                className: 'toggle-item',
+                onClick: () => toggle(genre.title), // Pass the title string to toggle
+                'data-active': active,
+                'data-disabled': reloading,
+              },
+                // Display title and album count
+                e('span', null, `${genre.title} (${genre.albumCount})`), 
+                e('div', { className: 'toggle-switch' })
+              );
+            })
+          )
+        ),
+
+        e('div', { className: 'row', style: { marginTop: 'auto', paddingTop: '16px', flexShrink: 0 } },
+          e('button',{className:'btn', onClick:clearAll, disabled:reloading || selected.length === 0}, 'Clear Selections')
+        )
+      );
+    }
+	
 
   function App(){
     var roon=useRoon();
@@ -131,30 +162,37 @@
     }, [currentZone?.volume?.value]);
 
     var toolbar=e('div',{className:'toolbar'},
-      e('div',{className:'seg'}, e('span',{className:'muted'},'Connected:'), e('strong',null, roon.state.paired?'Yes':'No'), e('span',{className:'muted'}, '('+(roon.state.coreName||'Core')+')')),
+      e('div',{className:'seg'}, e('span',{className:'muted'},'Connected to core:'), e('strong',{ className: roon.state.paired ? 'status-yes' : 'status-no' }, roon.state.paired ? 'Yes' : 'No'), e('span',{className:'muted'}, '('+(roon.state.coreName||'Core')+')')),
       e('div',{className:'divider'}),
       e('div',{className:'seg'}, e('span',{className:'muted'},'Zone'),
         e('select',{value:roon.state.lastZoneId||'',onChange:function(ev){roon.selectZone(ev.target.value);} }, roon.zones.map(function(z){return e('option',{key:z.id,value:z.id},z.name);}))
       ),
       e('div',{className:'spacer'}),
-      e('button',{
-        className:'btn btn-primary',
-        disabled:roon.busy||!roon.state.paired||!roon.state.lastZoneId,
-        onClick: async function() {
-          const result = await roon.playRandom(selected);
-          if (result) {
-            const actKey = [result.album || '', result.artist || ''].join('||');
-            let artUrl = null;
-            if (result.image_key) {
-              artUrl = await window.roon.getImage(result.image_key);
-            }
-            setActivity(function(a) {
-              lastActKeyRef.current = actKey;
-              return [{title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey}].concat(a).slice(0,12);
-            });
-          }
-        }
-      },
+	  e('button',{
+	          className:'btn btn-primary',
+	          disabled:roon.busy||!roon.state.paired||!roon.state.lastZoneId,
+		  onClick: async function() {
+		    const result = await roon.playRandom(selected);
+		    if (result) {
+		      const actKey = [result.album || '', result.artist || ''].join('||');
+		      let artUrl = null;
+		      if (result.image_key) {
+		        artUrl = await window.roon.getImage(result.image_key);
+		      }
+		      setActivity(function(a) {
+		        lastActKeyRef.current = actKey;
+		        // No longer saving item_key, just the title and subtitle which we already had
+		        return [{
+		          title: result.album || '—', 
+		          subtitle: result.artist || '', 
+		          art: artUrl, 
+		          t: Date.now(), 
+		          key: actKey 
+		        }].concat(a).slice(0,12);
+		      });
+		    }
+		  }
+	        },
         roon.busy?e('span',{className:'spinner'}):e(DiceIcon), roon.busy?' Working…':' Play Random Album')
     );
 
@@ -200,16 +238,28 @@ var npCard = e('div', { className: 'card' },
 
     var genresCard=e(Genres,{roon:roon, all:roon.genres, selected:selected, setSelected:setSelected});
 
-    var activityCard = e('div',{className:'card activity-card'}, e('h2',null,'Activity'),
-      e('div',{className:'activity'},
-        activity.length > 0 ? activity.map(function(a,i){
-          return e('div',{key:i,className:'item'},
-            a.art?e('img',{className:'thumb',src:a.art,alt:a.title}):e('div',{className:'thumb'}),
-            e('div',null, e('div',{className:'title'},a.title), e('div',{className:'muted'},a.subtitle||''), e('div',{className:'time'}, relTime(a.t)) )
-          );
-        }):e('div',{className:'muted'},'No actions yet.')
-      )
-    );
+var activityCard = e('div',{className:'card activity-card'}, e('h2',null,'Activity'),
+  e('div',{className:'activity'},
+    activity.length > 0 ? activity.map(function(a,i){
+      return e('button',{
+        key:i,
+        className:'item',
+        onClick: () => {
+          // Call the new function with title and subtitle
+          if (a.title && a.subtitle) {
+            window.roon.playAlbumByName(a.title, a.subtitle).catch(err => console.error("Failed to play from activity", err));
+          }
+        },
+        disabled: !a.title || !a.subtitle,
+        style: { width: '100%', appearance: 'none', textAlign: 'left', cursor: (a.title && a.subtitle) ? 'pointer' : 'default' }
+      },
+        // ... rest of the button content is unchanged
+        a.art?e('img',{className:'thumb',src:a.art,alt:a.title}):e('div',{className:'thumb'}),
+        e('div',null, e('div',{className:'title'},a.title), e('div',{className:'muted'},a.subtitle||''), e('div',{className:'time'}, relTime(a.t)) )
+      );
+    }):e('div',{className:'muted'},'No actions yet.')
+  )
+);
 
     return e('div',{className:'wrap'}, toolbar, e('div',{className:'grid'}, npCard, genresCard, activityCard));
   }

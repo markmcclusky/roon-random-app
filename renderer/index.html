@@ -32,35 +32,125 @@
 	
 	.toolbar{ display:flex; align-items:center; gap:12px; background:linear-gradient(180deg, rgba(99,102,241,.08), transparent 70%);
       border:1px solid var(--border); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow); }
-    .spacer{ flex:1; } .seg{ display:flex; align-items:center; gap:10px; } .divider{ width:1px; height:24px; background:var(--border); }
+    
+  .status-yes { color: #22c55e; /* A nice, vibrant green */ }
+  .status-no  { color: #ef4444; /* A clear, friendly red */ }
+	.spacer{ flex:1; } .seg{ display:flex; align-items:center; gap:10px; } .divider{ width:1px; height:24px; background:var(--border); }
     select, .btn{ height:34px; border-radius:9px; border:1px solid var(--border); background:var(--card); color:var(--fg); padding:0 10px; outline:none; }
     .btn{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
     .btn-primary{ background:var(--primary); color:var(--primary-ink); border-color:var(--primary); }
-    .btn:disabled{ opacity:.6; cursor:not-allowed; } .btn:focus-visible{ box-shadow:0 0 0 3px var(--ring); }
+    
+    .btn-primary {
+      transition: opacity 0.15s ease-in-out;
+    }
+    .btn-primary:not(:disabled):hover {
+      opacity: 0.7;
+    }
+	.btn:disabled{ opacity:.6; cursor:not-allowed; } .btn:focus-visible{ box-shadow:0 0 0 3px var(--ring); }
+	
 	.grid {
-	  display: grid;
-	  grid-template-columns: repeat(3, 1fr);
-	  gap: 20px;
-	  padding: 20px;
-	  flex-grow: 1; /* This is key: makes the grid fill all remaining space */
-	  min-height: 0;  /* A flexbox/grid trick to ensure proper sizing */
-	}
-    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
-    h1{ font-size:18px; margin:0 0 12px; } h2{ font-size:16px; margin:0 0 10px; } .muted{ color:var(--muted); }
-	.np {
-	  display: flex;
-	  gap: 20px;
-	  /* Tweak 1: Aligns the top of the album art with the top of the text block. */
-	  align-items: flex-start; 
-	}    .cover{ width:144px; height:144px; border-radius:12px; object-fit:cover; box-shadow:var(--shadow); }
-    .chipgrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+		  display: grid;
+		  grid-template-columns: repeat(3, 1fr);
+		  gap: 20px;
+		  padding: 20px;
+		  flex-grow: 1; 
+		  min-height: 0;
+		}
+	    /* --- THIS IS THE MAIN FIX --- */
+	    /* Revert .card to its simple, original state */
+	    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
+
+	    h1{ font-size:18px; margin:0 0 12px; } h2{ font-size:16px; margin:0 0 10px; } .muted{ color:var(--muted); }
+	
+	
+		.np {
+		  display: flex;
+		  gap: 20px;
+		  align-items: flex-start; 
+		}
+	    .cover{ width:144px; height:144px; border-radius:0; object-fit:cover; box-shadow:var(--shadow); }
+
+	    .genre-card-content {
+	      flex-grow: 1;
+	      overflow-y: auto;
+	      min-height: 0;
+	      padding-right: 10px; 
+	    }
+
+	    .toggle-list {
+	      display: flex;
+	      flex-direction: column;
+	      /* --- FIX 2: Tighter Spacing --- */
+	      gap: 8px; /* Reduced from 14px */
+	    }
+
+	    .toggle-item {
+	      display: flex;
+	      align-items: center;
+	      justify-content: space-between;
+	      cursor: pointer;
+	      user-select: none;
+	      /* --- FIX 2: Tighter Spacing --- */
+	      padding: 4px 0; /* Add a little vertical padding for easier clicking */
+	    }
+
+       .toggle-item[data-disabled="true"] {
+         opacity: 0.5;
+         cursor: not-allowed;
+       }
+
+       .toggle-switch {
+         position: relative;
+         display: inline-block;
+         width: 44px;
+         height: 24px;
+         background-color: #ccc;
+         border-radius: 34px;
+         transition: background-color 0.2s;
+         flex-shrink: 0; /* Prevents the switch from shrinking */
+       }
+
+       .toggle-switch::before {
+         content: "";
+         position: absolute;
+         height: 18px;
+         width: 18px;
+         left: 3px;
+         bottom: 3px;
+         background-color: white;
+         border-radius: 50%;
+         transition: transform 0.2s;
+       }
+
+       .toggle-item[data-active="true"] .toggle-switch {
+         background-color: var(--primary);
+       }
+
+       .toggle-item[data-active="true"] .toggle-switch::before {
+         transform: translateX(20px);
+       }
+	
+	
+	/*.chipgrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
     @media (min-width: 1100px){ .chipgrid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
     .chip{ appearance:none; border:1px solid var(--border); background:var(--card); border-radius:9999px; padding:8px 12px; cursor:pointer; text-align:center; }
-    .chip.chip-active{ background:var(--primary); border-color:var(--primary); color:var(--primary-ink); }
-    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .chip.chip-active{ background:var(--primary); border-color:var(--primary); color:var(--primary-ink); } */
+    
+	
+	.row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .activity{ display:flex; flex-direction:column; gap:8px; }
     .item{ display:flex; gap:10px; align-items:center; padding:8px; border-radius:10px; border:1px solid var(--border); }
-    .thumb{ width:48px; height:48px; border-radius:8px; object-fit:cover; background:var(--border); }
+	
+    button.item {
+      background: transparent;
+      /* border-color: transparent; Hide the border by default */
+      transition: background-color 0.15s ease-in-out;
+    }
+    button.item:hover {
+      background: var(--border); /* Use the border color for the hover background */
+    }
+	
+    .thumb{ width:48px; height:48px; border-radius:0; object-fit:cover; background:var(--border); }
     .title{ font-weight:600; } .time{ font-size:12px; color:var(--muted); } .list{ display:flex; flex-wrap:wrap; gap:6px; }
     
 	.np-details {
@@ -96,7 +186,7 @@
     }
 
     .btn-icon:hover img {
-      opacity: 0.7;
+      opacity: 0.5;
     }
 
     .btn-icon:disabled {
