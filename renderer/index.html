@@ -130,6 +130,16 @@
 	.row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .activity{ display:flex; flex-direction:column; gap:8px; }
     .item{ display:flex; gap:10px; align-items:center; padding:8px; border-radius:10px; border:1px solid var(--border); }
+	
+    button.item {
+      background: transparent;
+      /* border-color: transparent; Hide the border by default */
+      transition: background-color 0.15s ease-in-out;
+    }
+    button.item:hover {
+      background: var(--border); /* Use the border color for the hover background */
+    }
+	
     .thumb{ width:48px; height:48px; border-radius:8px; object-fit:cover; background:var(--border); }
     .title{ font-weight:600; } .time{ font-size:12px; color:var(--muted); } .list{ display:flex; flex-wrap:wrap; gap:6px; }
     

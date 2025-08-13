@@ -300,6 +300,70 @@ export function getZoneNowPlaying(zoneId) {
   return { song, artist, album, image_key: np?.image_key || null };
 }
 
+
+// In roonService.js, delete the old playAlbumByKey function and add this new one.
+
+export async function playAlbumByName(albumName, artistName) {
+  if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
+
+  let chosenZoneId = store.get('lastZoneId');
+  if (!chosenZoneId) throw new Error('No output zones available.');
+  try { transport.change_zone(chosenZoneId); } catch {}
+
+  const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
+  const ciFind = (items, text) => {
+    const t = String(text).toLowerCase();
+    return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
+  };
+  
+  // 1. Navigate to the main Albums list
+  await browseAsync({ hierarchy: 'browse', pop_all: true });
+  const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+  const library = ciFind(root.items, 'Library');
+  if (!library?.item_key) throw new Error("Could not find 'Library' in Roon's root.");
+  await open(library.item_key);
+  const lib = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+  const albums = ciFind(lib.items, 'Albums');
+  if (!albums?.item_key) throw new Error("Could not find 'Albums' in the Library.");
+  await open(albums.item_key);
+  const albums_item_key = albums.item_key;
+
+  // 2. Search for the album in the list by paging through
+  let albumRow = null;
+  let offset = 0;
+  const albumNameLower = albumName.toLowerCase();
+  const artistNameLower = artistName.toLowerCase();
+
+  while (!albumRow) {
+    const page = await loadAsync({ hierarchy: 'browse', item_key: albums_item_key, offset, count: 200 });
+    const items = page.items || [];
+    if (!items.length) break; // Stop if we've reached the end
+    albumRow = items.find(i => (i.title || '').toLowerCase() === albumNameLower && (i.subtitle || '').toLowerCase() === artistNameLower);
+    offset += items.length;
+  }
+  
+  if (!albumRow?.item_key) throw new Error(`Album '${albumName}' by '${artistName}' not found in the library.`);
+
+  // 3. Play the found album using its fresh item_key
+  await browseAsync({ hierarchy: 'browse', item_key: albumRow.item_key });
+  const albumPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 200 });
+  const playAlbumAction = (albumPage.items || []).find(i => i.title === 'Play Album' && i.hint === 'action_list');
+
+  if (playAlbumAction?.item_key) {
+    await browseAsync({ hierarchy: 'browse', item_key: playAlbumAction.item_key, zone_or_output_id: chosenZoneId });
+    const actions = await loadAsync({ hierarchy: 'browse', offset: 0, count: 20 });
+    const playNowAction = (actions.items || []).find(i => /play\s*now/i.test(i.title || '')) || (actions.items || [])[0];
+    if (!playNowAction?.item_key) throw new Error('No playable action found for this item.');
+    await browseAsync({ hierarchy: 'browse', item_key: playNowAction.item_key, zone_or_output_id: chosenZoneId });
+  } else {
+    // Fallback if a specific "Play Album" action isn't available
+    await new Promise((res, rej) => transport.play_from_here({ zone_or_output_id: chosenZoneId }, e => e ? rej(e) : res()));
+  }
+
+  return { success: true };
+}
+
+
 // The one function that starts it all
 export function initialize(win, st) {
   mainWindow = win;

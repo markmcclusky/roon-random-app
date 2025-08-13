@@ -167,24 +167,31 @@
         e('select',{value:roon.state.lastZoneId||'',onChange:function(ev){roon.selectZone(ev.target.value);} }, roon.zones.map(function(z){return e('option',{key:z.id,value:z.id},z.name);}))
       ),
       e('div',{className:'spacer'}),
-      e('button',{
-        className:'btn btn-primary',
-        disabled:roon.busy||!roon.state.paired||!roon.state.lastZoneId,
-        onClick: async function() {
-          const result = await roon.playRandom(selected);
-          if (result) {
-            const actKey = [result.album || '', result.artist || ''].join('||');
-            let artUrl = null;
-            if (result.image_key) {
-              artUrl = await window.roon.getImage(result.image_key);
-            }
-            setActivity(function(a) {
-              lastActKeyRef.current = actKey;
-              return [{title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey}].concat(a).slice(0,12);
-            });
-          }
-        }
-      },
+	  e('button',{
+	          className:'btn btn-primary',
+	          disabled:roon.busy||!roon.state.paired||!roon.state.lastZoneId,
+		  onClick: async function() {
+		    const result = await roon.playRandom(selected);
+		    if (result) {
+		      const actKey = [result.album || '', result.artist || ''].join('||');
+		      let artUrl = null;
+		      if (result.image_key) {
+		        artUrl = await window.roon.getImage(result.image_key);
+		      }
+		      setActivity(function(a) {
+		        lastActKeyRef.current = actKey;
+		        // No longer saving item_key, just the title and subtitle which we already had
+		        return [{
+		          title: result.album || '—', 
+		          subtitle: result.artist || '', 
+		          art: artUrl, 
+		          t: Date.now(), 
+		          key: actKey 
+		        }].concat(a).slice(0,12);
+		      });
+		    }
+		  }
+	        },
         roon.busy?e('span',{className:'spinner'}):e(DiceIcon), roon.busy?' Working…':' Play Random Album')
     );
 
@@ -230,16 +237,28 @@ var npCard = e('div', { className: 'card' },
 
     var genresCard=e(Genres,{roon:roon, all:roon.genres, selected:selected, setSelected:setSelected});
 
-    var activityCard = e('div',{className:'card activity-card'}, e('h2',null,'Activity'),
-      e('div',{className:'activity'},
-        activity.length > 0 ? activity.map(function(a,i){
-          return e('div',{key:i,className:'item'},
-            a.art?e('img',{className:'thumb',src:a.art,alt:a.title}):e('div',{className:'thumb'}),
-            e('div',null, e('div',{className:'title'},a.title), e('div',{className:'muted'},a.subtitle||''), e('div',{className:'time'}, relTime(a.t)) )
-          );
-        }):e('div',{className:'muted'},'No actions yet.')
-      )
-    );
+var activityCard = e('div',{className:'card activity-card'}, e('h2',null,'Activity'),
+  e('div',{className:'activity'},
+    activity.length > 0 ? activity.map(function(a,i){
+      return e('button',{
+        key:i,
+        className:'item',
+        onClick: () => {
+          // Call the new function with title and subtitle
+          if (a.title && a.subtitle) {
+            window.roon.playAlbumByName(a.title, a.subtitle).catch(err => console.error("Failed to play from activity", err));
+          }
+        },
+        disabled: !a.title || !a.subtitle,
+        style: { width: '100%', appearance: 'none', textAlign: 'left', cursor: (a.title && a.subtitle) ? 'pointer' : 'default' }
+      },
+        // ... rest of the button content is unchanged
+        a.art?e('img',{className:'thumb',src:a.art,alt:a.title}):e('div',{className:'thumb'}),
+        e('div',null, e('div',{className:'title'},a.title), e('div',{className:'muted'},a.subtitle||''), e('div',{className:'time'}, relTime(a.t)) )
+      );
+    }):e('div',{className:'muted'},'No actions yet.')
+  )
+);
 
     return e('div',{className:'wrap'}, toolbar, e('div',{className:'grid'}, npCard, genresCard, activityCard));
   }
