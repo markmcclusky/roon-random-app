@@ -14,6 +14,7 @@ let zonesRaw = [];
 let lastNPByZone = Object.create(null);
 let genresCache = null;
 let genresCacheTime = null;
+let playedThisSession = new Set();
 
 // We will pass the window and store from main.js during initialization
 let mainWindow = null;
@@ -108,8 +109,6 @@ export function setFilters(filters) {
 }
 export function setLastZone(id) { store.set('lastZoneId', id || null); }
 
-// roonService.js
-
 export async function listGenres() {
   if (genresCache && (Date.now() - genresCacheTime < 3600 * 1000)) {
     return genresCache;
@@ -179,12 +178,16 @@ export async function listGenres() {
   return detailedGenres;
 }
 
+// In roonService.js, replace the entire pickRandomAlbumAndPlay function
+
+// In roonService.js
+
 export async function pickRandomAlbumAndPlay(genres = []) {
   if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
-  const zones = zonesCache;
+  
   let chosenZoneId = store.get('lastZoneId');
-  if (!chosenZoneId || !zones.some(z => z.id === chosenZoneId)) {
-    chosenZoneId = zones[0]?.id || null;
+  if (!chosenZoneId || !zonesCache.some(z => z.id === chosenZoneId)) {
+    chosenZoneId = zonesCache[0]?.id || null;
     if (chosenZoneId) store.set('lastZoneId', chosenZoneId);
   }
   if (!chosenZoneId) throw new Error('No output zones available.');
@@ -195,10 +198,12 @@ export async function pickRandomAlbumAndPlay(genres = []) {
     const t = String(text).toLowerCase();
     return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
   };
+
   await browseAsync({ hierarchy: 'browse', pop_all: true });
   const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
   let targetKey = null;
 
+  // ... (Genre and library Browse logic remains exactly the same) ...
   if (Array.isArray(genres) && genres.length > 0) {
     const genresNode = ciFind(root.items, 'Genres');
     if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
@@ -233,20 +238,46 @@ export async function pickRandomAlbumAndPlay(genres = []) {
     await open(albums.item_key);
     targetKey = albums.item_key;
   }
+  
+  // --- CORRECTED PICKING LOGIC ---
   const header = await browseAsync({ hierarchy: 'browse' });
   const total = header?.list?.count ?? 0;
-  let picked;
-  if (total > 0) {
-    const idx = Math.floor(Math.random() * total);
-    const one = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: idx, count: 1 });
-    picked = one.items?.[0] || null;
-  } else {
-    const page = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: 0, count: 200 });
-    const items = (page.items || []).filter(Boolean);
-    if (!items.length) throw new Error('Albums list empty');
-    picked = items[Math.floor(Math.random() * items.length)];
+  if (total === 0) throw new Error('Album list is empty.');
+  
+  let picked = null;
+  // If most of the list has been played, increase attempts.
+  const maxAttempts = Math.min(total, 50) + playedThisSession.size; 
+  
+  for (let i = 0; i < maxAttempts; i++) {
+      const idx = Math.floor(Math.random() * total);
+      const one = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: idx, count: 1 });
+      const candidate = one.items?.[0] || null;
+
+      if (candidate) {
+          // Use a stable compound key: "Album Title||Artist Name"
+          const compoundKey = `${candidate.title}||${candidate.subtitle}`;
+          if (!playedThisSession.has(compoundKey)) {
+              picked = candidate;
+              break; // Found an unplayed album
+          }
+      }
   }
-  if (!picked?.item_key) throw new Error('Failed to pick album');
+
+  if (!picked) {
+      // Clear the history automatically and try one last time
+      console.log(`[roonService] Could not find unplayed album. Clearing session history and retrying.`);
+      playedThisSession.clear();
+      const idx = Math.floor(Math.random() * total);
+      const one = await loadAsync({ hierarchy: 'browse', item_key: targetKey, offset: idx, count: 1 });
+      picked = one.items?.[0] || null;
+      if (!picked) throw new Error(`Could not find an album after resetting session.`);
+  }
+
+  // Use the compound key for tracking
+  const finalCompoundKey = `${picked.title}||${picked.subtitle}`;
+  playedThisSession.add(finalCompoundKey);
+  
+  // ... (The rest of the function for playing the album remains the same) ...
   await open(picked.item_key);
   const albumPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 200 });
   let artKey = picked?.image_key || albumPage?.list?.image_key || null;
@@ -265,8 +296,10 @@ export async function pickRandomAlbumAndPlay(genres = []) {
   } else {
     await new Promise((res, rej) => transport.play_from_here({ zone_or_output_id: chosenZoneId }, e => e ? rej(e) : res()));
   }
+
   return { album: picked.title, artist: picked.subtitle, image_key: artKey };
 }
+
 
 export function getImageDataUrl(image_key, opts = {}) {
   return new Promise((resolve) => {
@@ -299,9 +332,6 @@ export function getZoneNowPlaying(zoneId) {
   
   return { song, artist, album, image_key: np?.image_key || null };
 }
-
-
-// In roonService.js, delete the old playAlbumByKey function and add this new one.
 
 export async function playAlbumByName(albumName, artistName) {
   if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
@@ -361,6 +391,13 @@ export async function playAlbumByName(albumName, artistName) {
   }
 
   return { success: true };
+}
+
+
+export function clearSessionHistory() {
+  playedThisSession.clear();
+  console.log('[roonService] Session play history cleared.');
+  return true;
 }
 
 
