@@ -32,11 +32,21 @@
 	
 	.toolbar{ display:flex; align-items:center; gap:12px; background:linear-gradient(180deg, rgba(99,102,241,.08), transparent 70%);
       border:1px solid var(--border); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow); }
-    .spacer{ flex:1; } .seg{ display:flex; align-items:center; gap:10px; } .divider{ width:1px; height:24px; background:var(--border); }
+    
+  .status-yes { color: #22c55e; /* A nice, vibrant green */ }
+  .status-no  { color: #ef4444; /* A clear, friendly red */ }
+	.spacer{ flex:1; } .seg{ display:flex; align-items:center; gap:10px; } .divider{ width:1px; height:24px; background:var(--border); }
     select, .btn{ height:34px; border-radius:9px; border:1px solid var(--border); background:var(--card); color:var(--fg); padding:0 10px; outline:none; }
     .btn{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
     .btn-primary{ background:var(--primary); color:var(--primary-ink); border-color:var(--primary); }
-    .btn:disabled{ opacity:.6; cursor:not-allowed; } .btn:focus-visible{ box-shadow:0 0 0 3px var(--ring); }
+    
+    .btn-primary {
+      transition: opacity 0.15s ease-in-out;
+    }
+    .btn-primary:not(:disabled):hover {
+      opacity: 0.7;
+    }
+	.btn:disabled{ opacity:.6; cursor:not-allowed; } .btn:focus-visible{ box-shadow:0 0 0 3px var(--ring); }
 	
 	.grid {
 		  display: grid;
@@ -176,7 +186,7 @@
     }
 
     .btn-icon:hover img {
-      opacity: 0.7;
+      opacity: 0.5;
     }
 
     .btn-icon:disabled {

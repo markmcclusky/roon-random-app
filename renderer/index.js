@@ -6,10 +6,11 @@
   function DiceIcon(props){
     return e('svg', Object.assign({ width:16, height:16, viewBox:'0 0 24 24', fill:'none' }, props),
       e('rect', { x:3, y:3, width:18, height:18, rx:4, stroke:'currentColor', 'stroke-width':1.6 }),
-      e('circle', { cx:9, cy:9, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:15, cy:15, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:15, cy:9, r:1.4, fill:'currentColor' }),
-      e('circle', { cx:9, cy:15, r:1.4, fill:'currentColor' })
+      e('circle', { cx:8, cy:8, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:16, cy:16, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:16, cy:8, r:1.4, fill:'currentColor' }),
+      e('circle', { cx:8, cy:16, r:1.4, fill:'currentColor' }),    
+      e('circle', { cx:12, cy:12, r:1.4, fill:'currentColor' })
     );
   }
 
@@ -161,7 +162,7 @@
     }, [currentZone?.volume?.value]);
 
     var toolbar=e('div',{className:'toolbar'},
-      e('div',{className:'seg'}, e('span',{className:'muted'},'Connected:'), e('strong',null, roon.state.paired?'Yes':'No'), e('span',{className:'muted'}, '('+(roon.state.coreName||'Core')+')')),
+      e('div',{className:'seg'}, e('span',{className:'muted'},'Connected to core:'), e('strong',{ className: roon.state.paired ? 'status-yes' : 'status-no' }, roon.state.paired ? 'Yes' : 'No'), e('span',{className:'muted'}, '('+(roon.state.coreName||'Core')+')')),
       e('div',{className:'divider'}),
       e('div',{className:'seg'}, e('span',{className:'muted'},'Zone'),
         e('select',{value:roon.state.lastZoneId||'',onChange:function(ev){roon.selectZone(ev.target.value);} }, roon.zones.map(function(z){return e('option',{key:z.id,value:z.id},z.name);}))
