@@ -108,24 +108,61 @@ export function setFilters(filters) {
 }
 export function setLastZone(id) { store.set('lastZoneId', id || null); }
 
+// roonService.js
+
 export async function listGenres() {
   if (genresCache && (Date.now() - genresCacheTime < 3600 * 1000)) {
     return genresCache;
   }
   if (!browse) throw new Error('Not connected to a Roon Core');
+
   const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
+  
   async function loadAll(item_key) {
-    const names = [];
+    const genres = [];
     let offset = 0;
+    const albumCountRegex = /(\d+)\s+Albums?$/;
+
     while (true) {
       const page = await loadAsync({ hierarchy: 'browse', item_key, offset, count: 200 });
       const arr = page.items || [];
       if (!arr.length) break;
-      for (const it of arr) if (it?.title) names.push(it.title.trim());
+
+      for (const it of arr) {
+        if (it?.title && it?.subtitle) {
+          const match = it.subtitle.match(albumCountRegex);
+          const albumCount = match ? parseInt(match[1], 10) : 0;
+          
+          // --- THIS IS THE CHANGE ---
+          // Only add the genre if it has one or more albums
+          if (albumCount > 0) {
+            genres.push({
+              title: it.title.trim(),
+              albumCount: albumCount,
+            });
+          }
+        }
+      }
       offset += arr.length;
     }
-    return Array.from(new Set(names)).sort((a,b)=>a.localeCompare(b));
+
+    // Sort by album count in descending order
+    genres.sort((a, b) => b.albumCount - a.albumCount);
+
+    // This block for ensuring uniqueness can stay as is
+    const uniqueGenres = [];
+    const seenTitles = new Set();
+    for (const genre of genres) {
+        if (!seenTitles.has(genre.title)) {
+            uniqueGenres.push(genre);
+            seenTitles.add(genre.title);
+        }
+    }
+
+    return uniqueGenres;
   }
+
+  // The rest of the function remains the same...
   await browseAsync({ hierarchy: 'browse', pop_all: true });
   const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
   const ciFind = (items, text) => {
@@ -135,11 +172,11 @@ export async function listGenres() {
   let genresNode = ciFind(root.items, 'Genres') || null;
   if (!genresNode?.item_key) throw new Error('Could not locate Genres in this core.');
   await open(genresNode.item_key);
-  const names = await loadAll(genresNode.item_key);
-  if (!names.length) throw new Error('Genres page appears empty.');
-  genresCache = names;
+  const detailedGenres = await loadAll(genresNode.item_key);
+  if (!detailedGenres.length) throw new Error('Genres page appears empty.');
+  genresCache = detailedGenres;
   genresCacheTime = Date.now();
-  return names;
+  return detailedGenres;
 }
 
 export async function pickRandomAlbumAndPlay(genres = []) {

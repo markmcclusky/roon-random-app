@@ -62,27 +62,57 @@
     return { state,zones,genres,busy,refreshGenres,setFilters,selectZone,playRandom,transportControl,changeVolume };
   }
 
+
+  // renderer/index.js
+
   function Genres(props){
-    var all=props.all, selected=props.selected, setSelected=props.setSelected;
-    var _reloading=React.useState(false); var reloading=_reloading[0],setReloading=_reloading[1];
-    
-    function toggle(g){ setSelected(p => { var s=new Set(p); if(s.has(g))s.delete(g); else s.add(g); return Array.from(s); }); }
-    async function clearAll(){ setSelected([]); }
-    async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
-    
-    return e('div',{className:'card'},
-      e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
-        e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
-        e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
-      ),
-      
-      e('div',{className:'chipgrid'}, all.map(function(g){ var active=selected.includes(g); var cls='chip'+(active?' chip-active':''); return e('button',{key:g,className:cls,onClick:()=>toggle(g),disabled:reloading},g);})),
-      
-      e('div', { className: 'row', style: { marginTop: 12 } },
-        e('button',{className:'btn', onClick:clearAll, disabled:reloading}, 'Clear Genre Selections')
-      )
-    );
-  }
+      var all = props.all, selected = props.selected, setSelected = props.setSelected;
+      var _reloading = React.useState(false); var reloading = _reloading[0], setReloading = _reloading[1];
+
+      function toggle(genreTitle){ // Now accepts the genre title string
+        if (reloading) return;
+        setSelected(p => {
+          var s = new Set(p);
+          if (s.has(genreTitle)) s.delete(genreTitle);
+          else s.add(genreTitle);
+          return Array.from(s);
+        });
+      }
+
+      async function clearAll(){ setSelected([]); }
+      async function reload(){ setReloading(true); try{ await props.roon.refreshGenres(); } finally{ setReloading(false);} }
+
+      return e('div',{className:'card activity-card'},
+        e('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexShrink: 0 } },
+          e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
+          e('button', { className: 'btn-link', onClick: reload, disabled: reloading }, reloading ? 'Reloading…' : 'Reload Genres')
+        ),
+
+        e('div', { className: 'genre-card-content' },
+          e('div', { className: 'toggle-list' },
+            all.map(function(genre) { // 'genre' is now an object { title, albumCount }
+              var active = selected.includes(genre.title);
+              return e('div', {
+                key: genre.title, // Use the title as the key
+                className: 'toggle-item',
+                onClick: () => toggle(genre.title), // Pass the title string to toggle
+                'data-active': active,
+                'data-disabled': reloading,
+              },
+                // Display title and album count
+                e('span', null, `${genre.title} (${genre.albumCount})`), 
+                e('div', { className: 'toggle-switch' })
+              );
+            })
+          )
+        ),
+
+        e('div', { className: 'row', style: { marginTop: 'auto', paddingTop: '16px', flexShrink: 0 } },
+          e('button',{className:'btn', onClick:clearAll, disabled:reloading || selected.length === 0}, 'Clear Selections')
+        )
+      );
+    }
+	
 
   function App(){
     var roon=useRoon();
