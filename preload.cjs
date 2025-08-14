@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('roon', {
   listGenres:        () => ipcRenderer.invoke('roon:listGenres'),
   playRandomAlbum:   (genres) => ipcRenderer.invoke('roon:playRandomAlbum', genres),
   playAlbumByName:   (album, artist) => ipcRenderer.invoke('roon:playAlbumByName', album, artist),
+  playRandomAlbumByArtist: (artist, currentAlbum) => ipcRenderer.invoke('roon:playRandomAlbumByArtist', artist, currentAlbum),
   getImage:          (imageKey, opts) => ipcRenderer.invoke('roon:getImage', imageKey, opts),
   getZoneNowPlaying: (zoneId) => ipcRenderer.invoke('roon:getZoneNowPlaying', zoneId),
   transportControl:  (action) => ipcRenderer.invoke('roon:transport:control', action),

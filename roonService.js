@@ -15,6 +15,9 @@ let lastNPByZone = Object.create(null);
 let genresCache = null;
 let genresCacheTime = null;
 let playedThisSession = new Set();
+let isActionInProgress = false;
+let isDeepDiveInProgress = false;
+
 
 // We will pass the window and store from main.js during initialization
 let mainWindow = null;
@@ -42,34 +45,39 @@ function connectToRoon() {
     token: store.get('token'),
     save_token: (token) => store.set('token', token),
 
-    core_paired: (_core) => {
-      core = _core;
-      browse = core.services.RoonApiBrowse;
-      transport = core.services.RoonApiTransport;
+	core_paired: (_core) => {
+	  core = _core;
+	  browse = core.services.RoonApiBrowse;
+	  transport = core.services.RoonApiTransport;
 
-      transport.subscribe_zones((resp, data) => {
-        if (resp === 'Subscribed') {
-          zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
-        } else if (resp === 'Changed') {
-          if (Array.isArray(data?.zones)) {
-            zonesRaw = data.zones;
-          } else if (Array.isArray(data?.zones_changed)) {
-            const byId = new Map(zonesRaw.map(z => [z.zone_id, z]));
-            data.zones_changed.forEach(z => byId.set(z.zone_id, z));
-            zonesRaw = Array.from(byId.values());
-          }
-        }
-        zonesCache = zonesRaw.map(z => ({ id: z.zone_id, name: z.display_name, state: z.state, volume: z.outputs && z.outputs[0] ? z.outputs[0].volume : null }));
-        if (!store.get('lastZoneId') && zonesCache.length) {
-          store.set('lastZoneId', zonesCache[0].id);
-        }
-        emitZones();
-        const zid = store.get('lastZoneId');
-        const np = getZoneNowPlaying(zid);
-        if (np) maybeEmitNowPlaying(zid, np);
-      });
-      emitEvent({ type: 'core', status: 'paired', coreDisplayName: core.display_name });
-    },
+	  transport.subscribe_zones((resp, data) => {
+	    if (resp === 'Subscribed') {
+	      zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
+	    } else if (resp === 'Changed') {
+	      if (Array.isArray(data?.zones)) {
+	        zonesRaw = data.zones;
+	      } else if (Array.isArray(data?.zones_changed)) {
+	        const byId = new Map(zonesRaw.map(z => [z.zone_id, z]));
+	        data.zones_changed.forEach(z => byId.set(z.zone_id, z));
+	        zonesRaw = Array.from(byId.values());
+	      }
+	    }
+    
+	    // This runs on BOTH 'Subscribed' and 'Changed'
+	    zonesCache = zonesRaw.map(z => ({ id: z.zone_id, name: z.display_name, state: z.state, volume: z.outputs && z.outputs[0] ? z.outputs[0].volume : null }));
+	    if (!store.get('lastZoneId') && zonesCache.length) {
+	      store.set('lastZoneId', zonesCache[0].id);
+	    }
+	    emitZones();
+    
+	    // Always check for now playing after any zone update
+	    const zid = store.get('lastZoneId');
+	    const np = getZoneNowPlaying(zid);
+	    if (np) maybeEmitNowPlaying(zid, np);
+	  });
+  
+	  emitEvent({ type: 'core', status: 'paired', coreDisplayName: core.display_name });
+	},
 
     core_unpaired: () => {
       emitEvent({ type: 'core', status: 'unpaired' });
@@ -178,9 +186,7 @@ export async function listGenres() {
   return detailedGenres;
 }
 
-// In roonService.js, replace the entire pickRandomAlbumAndPlay function
 
-// In roonService.js
 
 export async function pickRandomAlbumAndPlay(genres = []) {
   if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
@@ -319,16 +325,22 @@ function maybeEmitNowPlaying(zoneId, meta) {
   const key = [meta.song, meta.artist, meta.album].join('||');
   if (lastNPByZone[zoneId] === key) return;
   lastNPByZone[zoneId] = key;
-  emitEvent({ type: 'nowPlaying', meta });
+  emitEvent({ type: 'nowPlaying', meta, zoneId });
 }
 
 export function getZoneNowPlaying(zoneId) {
   const z = (zonesRaw || []).find(zz => zz.zone_id === zoneId);
-  if (!z || !z.now_playing) return null;
+  if (!z) return null;
+  
   const np = z.now_playing;
+  if (!np) return null;
+  
   const song = np?.three_line?.line1 || null;
   const artist = np?.three_line?.line2 || null;
   const album = np?.three_line?.line3 || null;
+  
+  // Only return null if we have absolutely no meaningful data
+  if (!song && !artist && !album) return null;
   
   return { song, artist, album, image_key: np?.image_key || null };
 }
@@ -393,6 +405,84 @@ export async function playAlbumByName(albumName, artistName) {
   return { success: true };
 }
 
+
+
+
+export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
+  if (isDeepDiveInProgress) {
+    console.log(`[DEEP DIVE] IGNORED: A deep dive is already in progress.`);
+    return { ignored: true };
+  }
+  isDeepDiveInProgress = true;
+  
+  const log = (msg, data) => console.log(`[${new Date().toLocaleTimeString()}] [DEEP DIVE] ${msg}`, data || '');
+  
+  try {
+    if (!browse || !transport) throw new Error('Not connected to a Roon Core.');
+
+    let chosenZoneId = store.get('lastZoneId');
+    if (!chosenZoneId) throw new Error('No output zones available.');
+    try { transport.change_zone(chosenZoneId); } catch {}
+
+    const open = (item_key) => browseAsync({ hierarchy: 'browse', item_key });
+    const ciFind = (items, text) => {
+      const t = String(text).toLowerCase();
+      return (items || []).find(i => (i?.title || '').toLowerCase() === t) || (items || []).find(i => (i?.title || '').toLowerCase().includes(t));
+    };
+
+    log(`--- START for ${artistName} (currently playing: ${currentAlbumName}) ---`);
+    
+    await browseAsync({ hierarchy: 'browse', pop_all: true });
+    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    const library = ciFind(root.items, 'Library');
+    await open(library.item_key);
+    const lib = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    const artists = ciFind(lib.items, 'Artists');
+    await open(artists.item_key);
+    const artists_item_key = artists.item_key;
+    let artistRow = null;
+    let offset = 0;
+    while (!artistRow) {
+      const page = await loadAsync({ hierarchy: 'browse', item_key: artists_item_key, offset, count: 200 });
+      if (!page.items || page.items.length === 0) break;
+      artistRow = page.items.find(i => (i.title || '').toLowerCase() === artistName.toLowerCase());
+      offset += page.items.length;
+    }
+    if (!artistRow?.item_key) throw new Error(`Artist '${artistName}' not found.`);
+    
+    await open(artistRow.item_key);
+    const artistPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    const allAlbumsOnPage = (artistPage.items || []).filter(i => i.hint === 'list' && i.subtitle === artistName);
+    const availableAlbums = allAlbumsOnPage.filter(a => a.title !== currentAlbumName);
+    if (availableAlbums.length === 0) {
+      throw new Error(`Not enough albums to pick a new one for '${artistName}'.`);
+    }
+    const picked = availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
+    if (!picked?.item_key) throw new Error('Could not select a new album to play.');
+    log(`Randomly selected album: "${picked.title}"`);
+
+    await browseAsync({ hierarchy: 'browse', item_key: picked.item_key });
+    const albumPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 200 });
+    let artKey = picked?.image_key || albumPage?.list?.image_key || null;
+
+    const playAlbumAction = (albumPage.items || []).find(i => i.title === 'Play Album' && i.hint === 'action_list');
+    if (playAlbumAction?.item_key) {
+      await browseAsync({ hierarchy: 'browse', item_key: playAlbumAction.item_key, zone_or_output_id: chosenZoneId });
+      const actions = await loadAsync({ hierarchy: 'browse', offset: 0, count: 20 });
+      const playNowAction = (actions.items || []).find(i => /play\s*now/i.test(i.title || '')) || (actions.items || [])[0];
+      if (!playNowAction?.item_key) throw new Error('No playable action found for this item.');
+      await browseAsync({ hierarchy: 'browse', item_key: playNowAction.item_key, zone_or_output_id: chosenZoneId });
+    } else {
+      await new Promise((res, rej) => transport.play_from_here({ zone_or_output_id: chosenZoneId }, e => e ? rej(e) : res()));
+    }
+    
+    log(`--- SUCCESS for "${picked.title}" ---`);
+    return { album: picked.title, artist: picked.subtitle, image_key: artKey };
+
+  } finally {
+    isDeepDiveInProgress = false;
+  }
+}
 
 export function clearSessionHistory() {
   playedThisSession.clear();
