@@ -21,6 +21,7 @@ const IPC_CHANNELS = {
   // Zone and playback data
   LIST_ZONES: 'roon:listZones',
   GET_ZONE_NOW_PLAYING: 'roon:getZoneNowPlaying',
+  REFRESH_NOW_PLAYING: 'roon:refreshNowPlaying', // NEW
   
   // Music browsing and selection
   LIST_GENRES: 'roon:listGenres',
@@ -93,8 +94,9 @@ function registerStateHandlers(store, mainWindow) {
 /**
  * Registers handlers for zone information and playback data
  * @param {Object} store - Electron store instance
+ * @param {Object} mainWindow - Main window instance
  */
-function registerZoneHandlers(store) {
+function registerZoneHandlers(store, mainWindow) {
   /**
    * Returns list of available output zones
    * @returns {Array} Array of zone objects
@@ -110,6 +112,33 @@ function registerZoneHandlers(store) {
    */
   ipcMain.handle(IPC_CHANNELS.GET_ZONE_NOW_PLAYING, (_event, zoneId) => {
     return RoonService.getZoneNowPlaying(zoneId);
+  });
+
+  /**
+   * NEW: Actively refreshes and emits now playing for the current zone
+   * This is useful for initial app startup to populate the Now Playing section
+   * @returns {Object|null} Now playing metadata or null
+   */
+  ipcMain.handle(IPC_CHANNELS.REFRESH_NOW_PLAYING, () => {
+    const selectedZoneId = store.get('lastZoneId');
+    if (!selectedZoneId) {
+      console.log('[refreshNowPlaying] No zone selected');
+      return null;
+    }
+
+    const nowPlaying = RoonService.getZoneNowPlaying(selectedZoneId);
+    console.log('[refreshNowPlaying] Zone:', selectedZoneId, 'Now Playing:', nowPlaying);
+    
+    if (nowPlaying && mainWindow?.webContents) {
+      // Emit the event to the renderer
+      mainWindow.webContents.send('roon:event', { 
+        type: 'nowPlaying', 
+        meta: nowPlaying, 
+        zoneId: selectedZoneId 
+      });
+    }
+    
+    return nowPlaying;
   });
 }
 
@@ -281,7 +310,7 @@ export function registerIpcHandlers(store, mainWindow) {
   
   // Register all handler groups
   registerStateHandlers(store, mainWindow);
-  registerZoneHandlers(store);
+  registerZoneHandlers(store, mainWindow); // Updated to pass mainWindow
   registerMusicHandlers();
   registerMediaHandlers(store);
   

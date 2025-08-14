@@ -23,6 +23,26 @@
   // ==================== UTILITY FUNCTIONS ====================
 
   /**
+   * Extracts the primary artist name from a compound artist string
+   * Roon often sends artist names like "Lou Donaldson / Leon Spencer" or 
+   * "Miles Davis / John Coltrane / Bill Evans" for collaborations.
+   * This function returns just the first (primary) artist name.
+   * 
+   * @param {string} artistString - Full artist string from Roon
+   * @returns {string} Primary artist name
+   */
+  function extractPrimaryArtist(artistString) {
+    if (!artistString || typeof artistString !== 'string') {
+      return '';
+    }
+  
+    // Split on forward slash and take the first part
+    const primaryArtist = artistString.split('/')[0].trim();
+  
+    return primaryArtist;
+  }
+ 
+  /**
    * Formats a timestamp as relative time (e.g., "5m ago", "2h ago")
    * @param {number} timestamp - Unix timestamp in milliseconds
    * @returns {string} Formatted relative time string
@@ -75,7 +95,7 @@
     );
   }
 
-  // ==================== CUSTOM HOOKS ====================
+// ==================== CUSTOM HOOKS ====================
 
   /**
    * Main hook for Roon integration and state management
@@ -130,6 +150,20 @@
         setGenres(Array.isArray(genreList) ? genreList : []);
       } catch (error) {
         console.error('Failed to list genres:', error);
+      }
+    }
+
+    /**
+     * NEW: Refreshes now playing information for the current zone
+     */
+    async function refreshNowPlaying() {
+      try {
+        const nowPlaying = await window.roon.refreshNowPlaying();
+        console.log('[UI] Refreshed now playing:', nowPlaying);
+        return nowPlaying;
+      } catch (error) {
+        console.error('Failed to refresh now playing:', error);
+        return null;
       }
     }
 
@@ -247,6 +281,8 @@
     // ==================== INITIALIZATION ====================
 
     useEffect(function initializeRoon() {
+      let hasTriedInitialNowPlaying = false;
+
       // Initial data loading
       (async function() {
         await refreshState();
@@ -264,8 +300,26 @@
             paired: payload.status === 'paired',
             coreName: payload.coreDisplayName
           }));
+
+          // When core becomes paired, try to get initial now playing after a delay
+          if (payload.status === 'paired' && !hasTriedInitialNowPlaying) {
+            hasTriedInitialNowPlaying = true;
+            setTimeout(async () => {
+              console.log('[UI] Core paired, attempting to refresh now playing...');
+              await refreshNowPlaying();
+            }, 500); // Give some time for zones to be loaded
+          }
         } else if (payload.type === 'zones') {
           setZones(payload.zones || []);
+          
+          // When zones are first loaded, try to get now playing if we haven't already
+          if (!hasTriedInitialNowPlaying && payload.zones && payload.zones.length > 0) {
+            hasTriedInitialNowPlaying = true;
+            setTimeout(async () => {
+              console.log('[UI] Zones loaded, attempting to refresh now playing...');
+              await refreshNowPlaying();
+            }, 200);
+          }
         }
       });
     }, []);
@@ -280,6 +334,7 @@
       
       // Functions
       refreshGenres,
+      refreshNowPlaying, // NEW
       setFilters,
       selectZone,
       playRandomAlbum,
@@ -444,7 +499,7 @@
             if (dataUrl) {
               setNowPlaying({
                 song: metadata.song,
-                artist: metadata.artist,
+                artist: metadata.artist, // Keep full artist for display
                 album: metadata.album,
                 art: dataUrl
               });
@@ -455,7 +510,7 @@
           setNowPlaying(function(previous) {
             return {
               song: metadata.song,
-              artist: metadata.artist,
+              artist: metadata.artist, // Keep full artist for display
               album: metadata.album,
               art: previous.art
             };
@@ -531,6 +586,7 @@
       return () => document.removeEventListener('keydown', handleKeyDown);
     }, [roon.busy, roon.state.paired, roon.state.lastZoneId, nowPlaying.artist, nowPlaying.album]);
 
+
     // ==================== EVENT HANDLERS ====================
 
     /**
@@ -540,13 +596,15 @@
       const result = await roon.playRandomAlbum(selectedGenres);
       
       if (result && !result.ignored) {
-        const activityKey = createActivityKey(result.album, result.artist);
+        // Use primary artist for activity tracking
+        const primaryArtist = extractPrimaryArtist(result.artist);
+        const activityKey = createActivityKey(result.album, primaryArtist);
         const artUrl = result.image_key ? 
           await window.roon.getImage(result.image_key) : null;
         
         const activityItem = {
           title: result.album || '—',
-          subtitle: result.artist || '',
+          subtitle: primaryArtist || '', // Use primary artist for consistency
           art: artUrl,
           t: Date.now(),
           key: activityKey
@@ -564,16 +622,22 @@
     async function handleMoreFromArtist() {
       if (!nowPlaying.artist || !nowPlaying.album) return;
       
-      const result = await roon.playRandomAlbumByArtist(nowPlaying.artist, nowPlaying.album);
+      // FIXED: Use only the primary artist for the search
+      const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
+      console.log(`[More from Artist] Full artist: "${nowPlaying.artist}" -> Primary: "${primaryArtist}"`);
+      
+      const result = await roon.playRandomAlbumByArtist(primaryArtist, nowPlaying.album);
       
       if (result && !result.ignored) {
-        const activityKey = createActivityKey(result.album, result.artist);
+        // Use primary artist for activity tracking too
+        const resultPrimaryArtist = extractPrimaryArtist(result.artist);
+        const activityKey = createActivityKey(result.album, resultPrimaryArtist);
         const artUrl = result.image_key ? 
           await window.roon.getImage(result.image_key) : null;
         
         const activityItem = {
           title: result.album || '—',
-          subtitle: result.artist || '',
+          subtitle: resultPrimaryArtist || '',
           art: artUrl,
           t: Date.now(),
           key: activityKey
@@ -599,6 +663,9 @@
 
     const isPlaying = currentZone?.state === 'playing';
     const hasVolumeControl = currentZone?.volume?.type === 'number';
+
+    // Get primary artist for button state (More from Artist button should be enabled if we have a primary artist)
+    const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
 
     // ==================== RENDER TOOLBAR ====================
 
@@ -646,85 +713,86 @@
 
     // ==================== RENDER NOW PLAYING CARD ====================
 
-    const nowPlayingCard = e('div', { className: 'card' },
-      e('h2', null, 'Now Playing'),
-      e('div', { className: 'np' },
-        // Left side: Album art and More from Artist button
-        e('div', { className: 'np-left' },
-          nowPlaying.art ? 
-            e('img', { className: 'cover', src: nowPlaying.art, alt: 'Album art' }) :
-            e('div', { className: 'cover' }),
-          
-          e('button', {
-            className: 'btn btn-primary',
-            disabled: roon.busy || !nowPlaying.artist,
-            onClick: handleMoreFromArtist,
-            style: { 
-              width: '100%', 
-              marginTop: '16px', 
-              textAlign: 'center', 
-              justifyContent: 'center' 
-            }
-          }, 'More from Artist')
+const nowPlayingCard = e('div', { className: 'card' },
+  e('h2', null, 'Now Playing'),
+  e('div', { className: 'np' },
+    // Left side: Album art and More from Artist button
+    e('div', { className: 'np-left' },
+      nowPlaying.art ? 
+        e('img', { className: 'cover', src: nowPlaying.art, alt: 'Album art' }) :
+        e('div', { className: 'cover' }),
+      
+      e('button', {
+        className: 'btn btn-primary',
+        disabled: roon.busy || !primaryArtist, // FIXED: Use primary artist for enable/disable
+        onClick: handleMoreFromArtist,
+        style: { 
+          width: '100%', 
+          marginTop: '16px', 
+          textAlign: 'center', 
+          justifyContent: 'center' 
+        },
+        title: primaryArtist ? `Find more albums by ${primaryArtist}` : 'No artist available' // Helpful tooltip
+      }, 'More from Artist')
+    ),
+    
+    // Right side: Track info and controls
+    e('div', { className: 'np-details' },
+      // Track information - DISPLAY full artist but USE primary for functionality
+      e('div', null,
+        e('div', { 
+          style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } 
+        }, nowPlaying.song || '—'),
+        e('div', { 
+          style: { fontWeight: 700, marginBottom: 4 } 
+        }, nowPlaying.album || ''),
+        e('div', { 
+          className: 'muted', 
+          style: { fontSize: 15, marginBottom: 12 } 
+        }, nowPlaying.artist || '') // Show full artist name for user
+      ),
+      
+      // Transport controls and volume
+      e('div', { className: 'controls-row' },
+        e('div', { className: 'transport-controls' },
+          e('button', { 
+            className: 'btn-icon', 
+            onClick: () => roon.transportControl('previous') 
+          }, 
+            e('img', { src: './images/previous-100.png', alt: 'Previous' })
+          ),
+          e('button', { 
+            className: 'btn-icon btn-playpause', 
+            onClick: () => roon.transportControl('playpause') 
+          }, 
+            e('img', { 
+              src: isPlaying ? './images/pause-100.png' : './images/play-100.png', 
+              alt: 'Play/Pause' 
+            })
+          ),
+          e('button', { 
+            className: 'btn-icon', 
+            onClick: () => roon.transportControl('next') 
+          }, 
+            e('img', { src: './images/next-100.png', alt: 'Next' })
+          )
         ),
         
-        // Right side: Track info and controls
-        e('div', { className: 'np-details' },
-          // Track information
-          e('div', null,
-            e('div', { 
-              style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } 
-            }, nowPlaying.song || '—'),
-            e('div', { 
-              style: { fontWeight: 700, marginBottom: 4 } 
-            }, nowPlaying.album || ''),
-            e('div', { 
-              className: 'muted', 
-              style: { fontSize: 15, marginBottom: 12 } 
-            }, nowPlaying.artist || '')
-          ),
-          
-          // Transport controls and volume
-          e('div', { className: 'controls-row' },
-            e('div', { className: 'transport-controls' },
-              e('button', { 
-                className: 'btn-icon', 
-                onClick: () => roon.transportControl('previous') 
-              }, 
-                e('img', { src: './images/previous-100.png', alt: 'Previous' })
-              ),
-              e('button', { 
-                className: 'btn-icon btn-playpause', 
-                onClick: () => roon.transportControl('playpause') 
-              }, 
-                e('img', { 
-                  src: isPlaying ? './images/pause-100.png' : './images/play-100.png', 
-                  alt: 'Play/Pause' 
-                })
-              ),
-              e('button', { 
-                className: 'btn-icon', 
-                onClick: () => roon.transportControl('next') 
-              }, 
-                e('img', { src: './images/next-100.png', alt: 'Next' })
-              )
-            ),
-            
-            // Volume slider (if available)
-            hasVolumeControl ? e('input', {
-              className: 'volume-slider',
-              type: 'range',
-              min: currentZone.volume.min,
-              max: currentZone.volume.max,
-              step: currentZone.volume.step,
-              value: localVolume !== null ? localVolume : currentZone.volume.value,
-              onInput: (event) => setLocalVolume(event.target.value),
-              onChange: (event) => roon.changeVolume(event.target.value)
-            }) : null
-          )
-        )
+        // Volume slider (if available)
+        hasVolumeControl ? e('input', {
+          className: 'volume-slider',
+          type: 'range',
+          min: currentZone.volume.min,
+          max: currentZone.volume.max,
+          step: currentZone.volume.step,
+          value: localVolume !== null ? localVolume : currentZone.volume.value,
+          onInput: (event) => setLocalVolume(event.target.value),
+          onChange: (event) => roon.changeVolume(event.target.value)
+        }) : null
       )
-    );
+    )
+  )
+);
 
     // ==================== RENDER GENRE FILTER CARD ====================
 
