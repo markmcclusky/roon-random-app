@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('roon', {
   playRandomAlbumByArtist: (artist, currentAlbum) => ipcRenderer.invoke('roon:playRandomAlbumByArtist', artist, currentAlbum),
   getImage:          (imageKey, opts) => ipcRenderer.invoke('roon:getImage', imageKey, opts),
   getZoneNowPlaying: (zoneId) => ipcRenderer.invoke('roon:getZoneNowPlaying', zoneId),
+  refreshNowPlaying: () => ipcRenderer.invoke('roon:refreshNowPlaying'), // NEW
   transportControl:  (action) => ipcRenderer.invoke('roon:transport:control', action),
   changeVolume:      (value) => ipcRenderer.invoke('roon:changeVolume', value),
 
