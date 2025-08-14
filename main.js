@@ -1,4 +1,11 @@
-// main.js
+/**
+ * Main Process Entry Point - Roon Random Album
+ * 
+ * This is the main Electron process that creates the application window,
+ * initializes the Roon service, and sets up IPC communication between
+ * the main and renderer processes.
+ */
+
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import Store from 'electron-store';
@@ -6,55 +13,205 @@ import { fileURLToPath } from 'url';
 import { initialize as initializeRoonService } from './roonService.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
 
+// ==================== CONSTANTS ====================
+
+// ES module path resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Application window configuration
+const WINDOW_CONFIG = {
+  width: 1200,
+  height: 800,
+  minWidth: 780,
+  minHeight: 560,
+  title: 'Roon Random Album'
+};
+
+// Store configuration with sensible defaults
+const STORE_DEFAULTS = {
+  token: null,              // Roon authentication token
+  lastZoneId: null,         // Last selected output zone
+  filters: { genres: [] }   // Genre filter settings
+};
+
+// Security configuration for renderer process
+const WEB_PREFERENCES = {
+  preload: path.join(__dirname, 'preload.cjs'),
+  contextIsolation: true,   // Isolate context for security
+  nodeIntegration: false,   // Disable Node.js in renderer for security
+  sandbox: true             // Enable sandbox for additional security
+};
+
+// ==================== GLOBAL STATE ====================
+
+// Persistent storage for application settings
 const store = new Store({
   name: 'config',
-  defaults: {
-    token: null,
-    lastZoneId: null,
-    filters: { genres: [] }
-  }
+  defaults: STORE_DEFAULTS
 });
 
+// Main application window reference
 let mainWindow;
 
-function createWindow() {
+// ==================== WINDOW MANAGEMENT ====================
+
+/**
+ * Creates the main application window with proper security settings
+ * @returns {BrowserWindow} The created window instance
+ */
+function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 780,
-    minHeight: 560,
-    title: 'Roon Random Album',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
+    ...WINDOW_CONFIG,
+    webPreferences: WEB_PREFERENCES
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // mainWindow.webContents.once('dom-ready', () => mainWindow.webContents.openDevTools({ mode: 'detach' }));
+  // Load the main UI
+  const htmlPath = path.join(__dirname, 'renderer', 'index.html');
+  mainWindow.loadFile(htmlPath);
+
+  // Optional: Open DevTools for debugging (uncomment when needed)
+  // mainWindow.webContents.once('dom-ready', () => {
+  //   mainWindow.webContents.openDevTools({ mode: 'detach' });
+  // });
+
+  return mainWindow;
 }
 
-app.whenReady().then(() => {
-  createWindow();
+/**
+ * Handles window creation with proper initialization sequence
+ */
+function handleAppReady() {
+  // Create the main window
+  createMainWindow();
 
-  // Initialize our new modules
-  initializeRoonService(mainWindow, store);
-  registerIpcHandlers(store, mainWindow);
+  // Initialize backend services in the correct order
+  initializeBackendServices();
+}
+
+/**
+ * Initializes all backend services and IPC communication
+ */
+function initializeBackendServices() {
+  try {
+    // Initialize Roon service with window and store references
+    initializeRoonService(mainWindow, store);
+    
+    // Register all IPC handlers for UI communication
+    registerIpcHandlers(store, mainWindow);
+    
+    console.log('Backend services initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize backend services:', error);
+    
+    // Show error dialog to user
+    const { dialog } = require('electron');
+    dialog.showErrorBox(
+      'Initialization Error',
+      `Failed to start Roon Random Album: ${error.message}`
+    );
+  }
+}
+
+// ==================== APPLICATION LIFECYCLE ====================
+
+/**
+ * Handles application ready event
+ * This is the main entry point after Electron has initialized
+ */
+app.whenReady().then(() => {
+  handleAppReady();
 });
 
+/**
+ * Handles all windows being closed
+ * On macOS, applications typically stay active even when all windows are closed
+ */
 app.on('window-all-closed', () => {
+  // On macOS (darwin), don't quit the app when all windows are closed
+  // Users expect to be able to re-open windows from the dock
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
+/**
+ * Handles application activation (macOS specific)
+ * This occurs when the user clicks the dock icon while no windows are open
+ */
 app.on('activate', () => {
+  // On macOS, re-create the window when the dock icon is clicked
+  // and there are no other windows open
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createMainWindow();
   }
 });
+
+/**
+ * Handles application before-quit event
+ * Perform any necessary cleanup before the application exits
+ */
+app.on('before-quit', () => {
+  console.log('Application shutting down...');
+  
+  // Any cleanup code would go here
+  // The Roon service will automatically disconnect when the process exits
+});
+
+// ==================== ERROR HANDLING ====================
+
+/**
+ * Global error handler for uncaught exceptions
+ * This prevents the app from crashing on unexpected errors
+ */
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  
+  // Log the error but don't crash the app unless it's critical
+  if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+    console.log('Network error occurred, but continuing...');
+  } else {
+    // For other errors, we might want to restart or show a dialog
+    console.error('Critical error occurred');
+  }
+});
+
+/**
+ * Global handler for unhandled promise rejections
+ * This helps catch async errors that weren't properly handled
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  
+  // Log the rejection but continue running
+  // In production, you might want to report this to an error service
+});
+
+// ==================== DEVELOPMENT HELPERS ====================
+
+/**
+ * Development mode detection and helpers
+ */
+if (process.env.NODE_ENV === 'development') {
+  console.log('Running in development mode');
+  
+  // Enable additional logging in development
+  app.on('ready', () => {
+    console.log('App ready. Window created:', !!mainWindow);
+    console.log('Store path:', store.path);
+    console.log('Initial store data:', store.store);
+  });
+  
+  // Hot reload support could be added here if needed
+}
+
+// ==================== EXPORT FOR TESTING ====================
+
+// Export functions for testing purposes (only in development/test)
+if (process.env.NODE_ENV === 'test') {
+  module.exports = {
+    createMainWindow,
+    initializeBackendServices,
+    store
+  };
+}

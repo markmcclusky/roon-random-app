@@ -2,14 +2,41 @@
   "name": "roon-random-app",
   "version": "1.1.0",
   "productName": "Roon Random Album",
-  "description": "Mac app to play a random Roon album with filters",
+  "description": "Mac desktop app for playing random Roon albums with intelligent filtering and genre selection",
   "main": "main.js",
   "type": "module",
+  "author": {
+    "name": "Mark McClusky",
+    "email": "mark@example.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/markmcc/roon-random-app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmcc/roon-random-app.git"
+  },
+  "keywords": [
+    "roon",
+    "music",
+    "random",
+    "album",
+    "electron",
+    "mac",
+    "audio",
+    "streaming"
+  ],
   "scripts": {
     "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
     "make": "electron-forge make",
     "package": "electron-forge package",
-    "publish": "electron-forge publish"
+    "publish": "electron-forge publish",
+    "lint": "echo 'Linting not configured yet'",
+    "test": "echo 'Tests not configured yet'"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
   },
   "dependencies": {
     "electron-store": "^9.0.0",
@@ -26,5 +53,75 @@
     "@electron-forge/maker-zip": "^7.8.3",
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
     "electron": "^30.5.1"
+  },
+  "forge": {
+    "packagerConfig": {
+      "name": "Roon Random Album",
+      "executableName": "roon-random-album",
+      "icon": "./assets/icon",
+      "appBundleId": "com.markmcc.roonrandom",
+      "appCategoryType": "public.app-category.music",
+      "osxSign": false,
+      "osxNotarize": false
+    },
+    "makers": [
+      {
+        "name": "@electron-forge/maker-dmg",
+        "config": {
+          "name": "RoonRandomAlbum",
+          "title": "Roon Random Album ${version}",
+          "background": "./assets/dmg-background.png",
+          "icon": "./assets/icon.icns",
+          "iconSize": 80,
+          "contents": [
+            {
+              "x": 400,
+              "y": 100,
+              "type": "link",
+              "path": "/Applications"
+            },
+            {
+              "x": 200,
+              "y": 100,
+              "type": "file",
+              "path": "Roon Random Album.app"
+            }
+          ]
+        }
+      },
+      {
+        "name": "@electron-forge/maker-zip",
+        "platforms": ["darwin"]
+      }
+    ],
+    "plugins": [
+      {
+        "name": "@electron-forge/plugin-auto-unpack-natives"
+      }
+    ]
+  },
+  "build": {
+    "appId": "com.markmcc.roonrandom",
+    "productName": "Roon Random Album",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "roonService.js", 
+      "ipcHandlers.js",
+      "preload.cjs",
+      "renderer/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    }
   }
 }
