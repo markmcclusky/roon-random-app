@@ -7,13 +7,13 @@
   "type": "module",
   "author": {
     "name": "Mark McClusky",
-    "email": "mark@example.com"
+    "email": "mark@mcclusky.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/markmcc/roon-random-app",
+  "homepage": "https://github.com/markmcclusky/roon-random-app",
   "repository": {
     "type": "git",
-    "url": "https://github.com/markmcc/roon-random-app.git"
+    "url": "https://github.com/markmcclusky/roon-random-app.git"
   },
   "keywords": [
     "roon",
@@ -91,7 +91,9 @@
       },
       {
         "name": "@electron-forge/maker-zip",
-        "platforms": ["darwin"]
+        "platforms": [
+          "darwin"
+        ]
       }
     ],
     "plugins": [
@@ -108,7 +110,7 @@
     },
     "files": [
       "main.js",
-      "roonService.js", 
+      "roonService.js",
       "ipcHandlers.js",
       "preload.cjs",
       "renderer/**/*",
@@ -119,7 +121,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     }
