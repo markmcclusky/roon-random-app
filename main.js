@@ -44,7 +44,7 @@ app.whenReady().then(() => {
 
   // Initialize our new modules
   initializeRoonService(mainWindow, store);
-  registerIpcHandlers(store);
+  registerIpcHandlers(store, mainWindow);
 });
 
 app.on('window-all-closed', () => {

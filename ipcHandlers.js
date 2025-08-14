@@ -2,7 +2,7 @@
 import { ipcMain } from 'electron';
 import * as RoonService from './roonService.js';
 
-export function registerIpcHandlers(store) {
+export function registerIpcHandlers(store, mainWindow) {
   ipcMain.handle('roon:getState', () => ({
     paired: !!RoonService.getCore(),
     coreName: RoonService.getCore()?.display_name,
@@ -14,6 +14,19 @@ export function registerIpcHandlers(store) {
 
   ipcMain.handle('roon:selectZone', (_evt, zoneId) => {
     RoonService.setLastZone(zoneId);
+  
+    // Immediately get and emit now playing for the newly selected zone
+    const np = RoonService.getZoneNowPlaying(zoneId);
+    if (np) {
+      // Force emit without duplicate check since this is a user-initiated zone change
+      if (mainWindow?.webContents) {
+        mainWindow.webContents.send('roon:event', { 
+          type: 'nowPlaying', 
+          meta: np, 
+          zoneId: zoneId 
+        });
+      }
+    }
   });
 
   ipcMain.handle('roon:getFilters', () => RoonService.getFilters());

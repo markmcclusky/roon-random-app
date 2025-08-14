@@ -54,12 +54,13 @@
       catch(err) { console.error('Failed to play album by name:', err); alert(`Error: ${err.message}`); }
       finally { setBusy(false); }
     }
-    async function playRandomAlbumByArtist(artist, currentAlbum) {
-        setBusy(true);
-        try { await window.roon.playRandomAlbumByArtist(artist, currentAlbum);
-        return await window.roon.playRandomAlbumByArtist(artist, currentAlbum); }
-        catch(err) { console.error('Failed to play by artist:', err); alert(`Error: ${err.message}`); }
-        finally { setBusy(false); }
+	async function playRandomAlbumByArtist(artist, currentAlbum) {
+	    setBusy(true);
+	    try { 
+	        return await window.roon.playRandomAlbumByArtist(artist, currentAlbum);
+	    }
+	    catch(err) { console.error('Failed to play by artist:', err); alert(`Error: ${err.message}`); }
+	    finally { setBusy(false); }
     }
     // We removed the UI for this, but it's good practice to keep the function definition here
     async function clearSessionHistory() {
@@ -168,6 +169,83 @@
 	      else { setLocalVolume(null); }
 	    }, [currentZone?.volume?.value]);
     
+		// Add keyboard shortcuts
+		React.useEffect(function() {
+		  function handleKeyDown(event) {
+		    // Don't trigger shortcuts if user is typing in an input/select
+		    if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
+		      return;
+		    }
+    
+		    // Prevent default behavior for our shortcuts
+		    const handled = true;
+    
+		    switch(event.code) {
+		      case 'Space':
+		        event.preventDefault();
+		        if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
+		          roon.transportControl('playpause');
+		        }
+		        break;
+        
+		      case 'ArrowRight':
+		        event.preventDefault();
+		        if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
+		          roon.transportControl('next');
+		        }
+		        break;
+        
+		      case 'ArrowLeft':
+		        event.preventDefault();
+		        if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
+		          roon.transportControl('previous');
+		        }
+		        break;
+        
+		      case 'KeyR':
+		        event.preventDefault();
+		        if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
+		          // Trigger the Play Random Album button
+		          (async function() {
+		            const result = await roon.playRandom(selected);
+		            if (result && !result.ignored) {
+		              const actKey = [result.album || '', result.artist || ''].join('||');
+		              const artUrl = result.image_key ? await window.roon.getImage(result.image_key) : null;
+		              setActivity(a => [{ title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey }].concat(a).slice(0,12));
+		            }
+		          })();
+		        }
+		        break;
+        
+		      case 'KeyA':
+		        event.preventDefault();
+		        if (!roon.busy && roon.state.paired && roon.state.lastZoneId && nowPlaying.artist && nowPlaying.album) {
+		          // Trigger the More from Artist button
+		          (async function() {
+		            const result = await roon.playRandomAlbumByArtist(nowPlaying.artist, nowPlaying.album);
+		            if (result && !result.ignored) {
+		              const actKey = [result.album || '', result.artist || ''].join('||');
+		              const artUrl = result.image_key ? await window.roon.getImage(result.image_key) : null;
+		              setActivity(a => [{ title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey }].concat(a).slice(0, 12));
+		            }
+		          })();
+		        }
+		        break;
+        
+		      default:
+		        return; // Don't prevent default for unhandled keys
+		    }
+		  }
+  
+		  document.addEventListener('keydown', handleKeyDown);
+  
+		  // Cleanup
+		  return function() {
+		    document.removeEventListener('keydown', handleKeyDown);
+		  };
+		  
+		}, [roon.busy, roon.state.paired, roon.state.lastZoneId, nowPlaying.artist, nowPlaying.album, selected, roon, setActivity]);
+	
 	    var toolbar=e('div',{className:'toolbar'},
 	      e('div',{className:'seg'}, e('span',{className:'muted'},'Connected to core:'), 
 	        e('strong',{ className: roon.state.paired ? 'status-yes' : 'status-no' }, roon.state.paired ? 'Yes' : 'No'), 
@@ -195,57 +273,61 @@
 	    var isPlaying = currentZone && currentZone.state === 'playing';
 	    var hasVolumeControl = currentZone && currentZone.volume && currentZone.volume.type === 'number';
 
-	    var npCard = e('div', { className: 'card' },
-	      e('h2', null, 'Now Playing'),
-	      e('div', { className: 'np' },
-	        nowPlaying.art ? e('img', { className: 'cover', src: nowPlaying.art, alt:'Album art' }) : e('div', {className: 'cover'}),
-	        e('div', { className: 'np-details' },
-	          e('div', null,
-	            e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } }, nowPlaying.song || '—'),
-	            e('div', { style: { fontWeight: 700, marginBottom: 4 } }, nowPlaying.album || ''),
-	            e('div', { className: 'muted', style: { fontSize: 15, marginBottom: 12 } }, nowPlaying.artist || '')
-	          ),
-	          e('div', { style: { marginTop: 'auto' } }, 
-	            e('button', {
-	                className: 'btn',
-	                disabled: roon.busy || !nowPlaying.artist,
-	                onClick: async () => {
-	                    if (nowPlaying.artist && nowPlaying.album) {
-	                        const result = await roon.playRandomAlbumByArtist(nowPlaying.artist, nowPlaying.album);
-	                        if (result && !result.ignored) {
-	                            const actKey = [result.album || '', result.artist || ''].join('||');
-	                            const artUrl = result.image_key ? await window.roon.getImage(result.image_key) : null;
-	                            setActivity(a => [{ title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey }].concat(a).slice(0, 12));
-	                        }
-	                    }
-	                },
-	                style: { width: '100%', marginBottom: '16px' }
-	            }, 'Artist Deep Dive'),
-
-	            e('div', { className: 'controls-row' },
-	              e('div', { className: 'transport-controls' },
-	                e('button', { className: 'btn-icon', onClick: () => roon.transportControl('previous') }, 
-	                  e('img', { src: './images/previous-100.png', alt: 'Previous' })
-	                ),
-	                e('button', { className: 'btn-icon btn-playpause', onClick: () => roon.transportControl('playpause') }, 
-	                  e('img', { src: isPlaying ? './images/pause-100.png' : './images/play-100.png', alt: 'Play/Pause' })
-	                ),
-	                e('button', { className: 'btn-icon', onClick: () => roon.transportControl('next') }, 
-	                  e('img', { src: './images/next-100.png', alt: 'Next' })
-	                )
-	              ),
-	              hasVolumeControl ? e('input', {
-	                className: 'volume-slider', type: 'range',
-	                min: currentZone.volume.min, max: currentZone.volume.max, step: currentZone.volume.step,
-	                value: localVolume !== null ? localVolume : currentZone.volume.value,
-	                onInput: (ev) => setLocalVolume(ev.target.value),
-	                onChange: (ev) => roon.changeVolume(ev.target.value)
-	              }) : null
-	            )
-	          )
-	        )
-	      )
-	    );
+  var npCard = e('div', { className: 'card' },
+    e('h2', null, 'Now Playing'),
+    e('div', { className: 'np' },
+      e('div', { className: 'np-left' },
+        nowPlaying.art ? e('img', { className: 'cover', src: nowPlaying.art, alt:'Album art' }) : e('div', {className: 'cover'}),
+      
+        // More from Artist button below album art
+        e('button', {
+            className: 'btn btn-primary',
+            disabled: roon.busy || !nowPlaying.artist,
+            onClick: async () => {
+                if (nowPlaying.artist && nowPlaying.album) {
+                    const result = await roon.playRandomAlbumByArtist(nowPlaying.artist, nowPlaying.album);
+                    if (result && !result.ignored) {
+                        const actKey = [result.album || '', result.artist || ''].join('||');
+                        const artUrl = result.image_key ? await window.roon.getImage(result.image_key) : null;
+                        setActivity(a => [{ title: result.album || '—', subtitle: result.artist || '', art: artUrl, t: Date.now(), key: actKey }].concat(a).slice(0, 12));
+                    }
+                }
+            },
+            style: { width: '100%', marginTop: '16px', textAlign: 'center', justifyContent: 'center' }
+        }, 'More from Artist')
+      ),
+    
+      e('div', { className: 'np-details' },
+        e('div', null,
+          e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } }, nowPlaying.song || '—'),
+          e('div', { style: { fontWeight: 700, marginBottom: 4 } }, nowPlaying.album || ''),
+          e('div', { className: 'muted', style: { fontSize: 15, marginBottom: 12 } }, nowPlaying.artist || '')
+        ),
+      
+        // Transport controls moved up here, next to the track info
+        e('div', { className: 'controls-row' },
+          e('div', { className: 'transport-controls' },
+            e('button', { className: 'btn-icon', onClick: () => roon.transportControl('previous') }, 
+              e('img', { src: './images/previous-100.png', alt: 'Previous' })
+            ),
+            e('button', { className: 'btn-icon btn-playpause', onClick: () => roon.transportControl('playpause') }, 
+              e('img', { src: isPlaying ? './images/pause-100.png' : './images/play-100.png', alt: 'Play/Pause' })
+            ),
+            e('button', { className: 'btn-icon', onClick: () => roon.transportControl('next') }, 
+              e('img', { src: './images/next-100.png', alt: 'Next' })
+            )
+          ),
+          hasVolumeControl ? e('input', {
+            className: 'volume-slider', type: 'range',
+            min: currentZone.volume.min, max: currentZone.volume.max, step: currentZone.volume.step,
+            value: localVolume !== null ? localVolume : currentZone.volume.value,
+            onInput: (ev) => setLocalVolume(ev.target.value),
+            onChange: (ev) => roon.changeVolume(ev.target.value)
+          }) : null
+        )
+      )
+    )
+  );
 
 	    var genresCard=e(Genres,{roon:roon, all:roon.genres, selected:selected, setSelected:setSelected});
 

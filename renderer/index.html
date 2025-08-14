@@ -246,6 +246,21 @@
 	  min-height: 0;          /* A flexbox trick to ensure scrolling works correctly */
 	}
 	
+	.np-left {
+	  display: flex;
+	  flex-direction: column;
+	  align-items: center;
+	  flex-shrink: 0;
+	}
+
+	.np-details {
+	  display: flex;
+	  flex-direction: column;
+	  justify-content: flex-start;
+	  flex-grow: 1;
+	  gap: 8px; /* Reduced from 16px for tighter spacing */
+	}
+	
 	.spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.55); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
   </style>

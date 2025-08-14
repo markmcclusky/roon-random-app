@@ -45,34 +45,39 @@ function connectToRoon() {
     token: store.get('token'),
     save_token: (token) => store.set('token', token),
 
-    core_paired: (_core) => {
-      core = _core;
-      browse = core.services.RoonApiBrowse;
-      transport = core.services.RoonApiTransport;
+	core_paired: (_core) => {
+	  core = _core;
+	  browse = core.services.RoonApiBrowse;
+	  transport = core.services.RoonApiTransport;
 
-      transport.subscribe_zones((resp, data) => {
-        if (resp === 'Subscribed') {
-          zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
-        } else if (resp === 'Changed') {
-          if (Array.isArray(data?.zones)) {
-            zonesRaw = data.zones;
-          } else if (Array.isArray(data?.zones_changed)) {
-            const byId = new Map(zonesRaw.map(z => [z.zone_id, z]));
-            data.zones_changed.forEach(z => byId.set(z.zone_id, z));
-            zonesRaw = Array.from(byId.values());
-          }
-        }
-        zonesCache = zonesRaw.map(z => ({ id: z.zone_id, name: z.display_name, state: z.state, volume: z.outputs && z.outputs[0] ? z.outputs[0].volume : null }));
-        if (!store.get('lastZoneId') && zonesCache.length) {
-          store.set('lastZoneId', zonesCache[0].id);
-        }
-        emitZones();
-        const zid = store.get('lastZoneId');
-        const np = getZoneNowPlaying(zid);
-        if (np) maybeEmitNowPlaying(zid, np);
-      });
-      emitEvent({ type: 'core', status: 'paired', coreDisplayName: core.display_name });
-    },
+	  transport.subscribe_zones((resp, data) => {
+	    if (resp === 'Subscribed') {
+	      zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
+	    } else if (resp === 'Changed') {
+	      if (Array.isArray(data?.zones)) {
+	        zonesRaw = data.zones;
+	      } else if (Array.isArray(data?.zones_changed)) {
+	        const byId = new Map(zonesRaw.map(z => [z.zone_id, z]));
+	        data.zones_changed.forEach(z => byId.set(z.zone_id, z));
+	        zonesRaw = Array.from(byId.values());
+	      }
+	    }
+    
+	    // This runs on BOTH 'Subscribed' and 'Changed'
+	    zonesCache = zonesRaw.map(z => ({ id: z.zone_id, name: z.display_name, state: z.state, volume: z.outputs && z.outputs[0] ? z.outputs[0].volume : null }));
+	    if (!store.get('lastZoneId') && zonesCache.length) {
+	      store.set('lastZoneId', zonesCache[0].id);
+	    }
+	    emitZones();
+    
+	    // Always check for now playing after any zone update
+	    const zid = store.get('lastZoneId');
+	    const np = getZoneNowPlaying(zid);
+	    if (np) maybeEmitNowPlaying(zid, np);
+	  });
+  
+	  emitEvent({ type: 'core', status: 'paired', coreDisplayName: core.display_name });
+	},
 
     core_unpaired: () => {
       emitEvent({ type: 'core', status: 'unpaired' });
@@ -320,16 +325,22 @@ function maybeEmitNowPlaying(zoneId, meta) {
   const key = [meta.song, meta.artist, meta.album].join('||');
   if (lastNPByZone[zoneId] === key) return;
   lastNPByZone[zoneId] = key;
-  emitEvent({ type: 'nowPlaying', meta });
+  emitEvent({ type: 'nowPlaying', meta, zoneId });
 }
 
 export function getZoneNowPlaying(zoneId) {
   const z = (zonesRaw || []).find(zz => zz.zone_id === zoneId);
-  if (!z || !z.now_playing) return null;
+  if (!z) return null;
+  
   const np = z.now_playing;
+  if (!np) return null;
+  
   const song = np?.three_line?.line1 || null;
   const artist = np?.three_line?.line2 || null;
   const album = np?.three_line?.line3 || null;
+  
+  // Only return null if we have absolutely no meaningful data
+  if (!song && !artist && !album) return null;
   
   return { song, artist, album, image_key: np?.image_key || null };
 }
