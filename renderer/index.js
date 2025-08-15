@@ -764,6 +764,7 @@ e('div', { className: 'np-details' },
     e('div', {
       style: {
         fontWeight: 500,
+		fontSize: 15,
         marginBottom: 6,
         lineHeight: 1.12,
         overflowWrap: 'anywhere'
