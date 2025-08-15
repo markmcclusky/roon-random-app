@@ -40,33 +40,28 @@ The app features a clean three-column layout:
 
 ## Installation
 
-### Requirements
-- macOS (Intel or Apple Silicon)
-- Node.js 16+ and npm 8+
-- Roon Core running on your network
+### Option 1: Download Release
+1. Download the latest `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+2. Open the DMG and drag the app to your Applications folder
+3. Launch "Roon Random Album" from Applications
 
-### Building from Source
+Code is not signed, launch using right-click → "Open" the first time
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/markmcclusky/roon-random-app.git
-   cd roon-random-app
-   ```
+### Option 2: Build from Source
+```bash
+# Clone the repository
+git clone https://github.com/markmcc/roon-random-app.git
+cd roon-random-app
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+# Install dependencies
+npm install
 
-3. **Run in development mode**
-   ```bash
-   npm run dev
-   ```
+# Run in development mode
+npm run dev
 
-4. **Build for production**
-   ```bash
-   npm run make
-   ```
+# Or build for production
+npm run make
+```
 
 ## Setup
 
