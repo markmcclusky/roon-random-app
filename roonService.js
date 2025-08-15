@@ -48,8 +48,8 @@ const EXTENSION_CONFIG = {
   display_name: 'Roon Random Album',
   display_version: app.getVersion(),
   publisher: 'Mark McClusky',
-  email: 'mark@example.com',
-  website: 'https://example.com',
+  email: 'mark@mcclusky.com',
+  website: 'https://github.com/markmcclusky/roon-random-app',
   log_level: 'none'
 };
 
@@ -72,6 +72,7 @@ let genresCacheTime = null;
 
 // Session management
 let playedThisSession = new Set();
+let artistSessionHistory = new Map();
 let isActionInProgress = false;
 let isDeepDiveInProgress = false;
 
@@ -485,11 +486,26 @@ async function navigateToGenreAlbums(root, genreFilters) {
   
   await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
   
-  // Pick a random genre from the filters
-  const targetGenre = genreFilters[Math.floor(Math.random() * genreFilters.length)];
-  const targetGenreLower = targetGenre.toLowerCase();
+  // Weighted random selection based on album counts
+  const totalAlbums = genreFilters.reduce((sum, genre) => sum + genre.albumCount, 0);
+  const randomValue = Math.random() * totalAlbums;
   
-  // Find the genre in the list
+  let cumulativeWeight = 0;
+  let targetGenre = genreFilters[0]; // fallback
+  
+  for (const genre of genreFilters) {
+    cumulativeWeight += genre.albumCount;
+    if (randomValue <= cumulativeWeight) {
+      targetGenre = genre;
+      break;
+    }
+  }
+  
+  console.log(`[Weighted Selection] Picked "${targetGenre.title}" (${targetGenre.albumCount} albums) from total pool of ${totalAlbums}`);
+  
+  const targetGenreLower = targetGenre.title.toLowerCase();
+  
+  // Rest of the function stays the same, but use targetGenre.title instead of targetGenre
   let genreItem = null;
   let offset = 0;
   
@@ -514,8 +530,9 @@ async function navigateToGenreAlbums(root, genreFilters) {
   }
   
   if (!genreItem?.item_key) {
-    throw new Error(`Genre '${targetGenre}' not found.`);
+    throw new Error(`Genre '${targetGenre.title}' not found.`);
   }
+  
   
   await browseAsync({ hierarchy: 'browse', item_key: genreItem.item_key });
   const genrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
@@ -764,6 +781,16 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
 
     console.log(`[DEEP DIVE] Starting for ${artistName} (excluding: ${currentAlbumName})`);
     
+    // Initialize session tracking for this artist if needed
+    if (!artistSessionHistory.has(artistName)) {
+      artistSessionHistory.set(artistName, new Set());
+    }
+	const playedByArtist = artistSessionHistory.get(artistName);
+
+	// Always exclude the current album from being picked again this session
+	// (This represents the album we're trying to get away from)
+	playedByArtist.add(currentAlbumName);
+    
     // Navigate to artists list
     await browseAsync({ hierarchy: 'browse', pop_all: true });
     const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
@@ -808,18 +835,38 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
     const allAlbums = (artistPage.items || []).filter(item => 
       item.hint === 'list' && item.subtitle === artistName
     );
+	
+	// DEBUG: Log all albums and the current album for comparison
+	console.log(`[DEEP DIVE DEBUG] Current album to exclude: "${currentAlbumName}"`);
+	console.log(`[DEEP DIVE DEBUG] All albums found:`, allAlbums.map(a => `"${a.title}"`));
+	console.log(`[DEEP DIVE DEBUG] Played this session:`, Array.from(playedByArtist));
     
-    const availableAlbums = allAlbums.filter(album => 
-      album.title !== currentAlbumName
-    );
+	// Filter out albums we've played this session (including the starting album)
+	let availableAlbums = allAlbums.filter(album => 
+	  !playedByArtist.has(album.title)
+	);
     
+    // If no unplayed albums available, clear this artist's history and try again
     if (availableAlbums.length === 0) {
-      throw new Error(`Not enough albums to pick a new one for '${artistName}'.`);
+      console.log(`[DEEP DIVE] No unplayed albums found for ${artistName}, clearing session history`);
+      playedByArtist.clear();
+      
+      // Try again with cleared history
+      availableAlbums = allAlbums.filter(album => 
+        album.title !== currentAlbumName
+      );
+      
+      if (availableAlbums.length === 0) {
+        throw new Error(`Not enough albums to pick a new one for '${artistName}'.`);
+      }
     }
     
     // Pick and play random album
     const selectedAlbum = availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
-    console.log(`[DEEP DIVE] Selected: "${selectedAlbum.title}"`);
+    console.log(`[DEEP DIVE] Selected: "${selectedAlbum.title}" (${availableAlbums.length} available options)`);
+    
+    // Mark this album as played for this artist
+    playedByArtist.add(selectedAlbum.title);
     
     await playAlbum(selectedAlbum, zoneId);
     

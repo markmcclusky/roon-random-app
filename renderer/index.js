@@ -589,32 +589,44 @@
 
     // ==================== EVENT HANDLERS ====================
 
-    /**
-     * Handles Play Random Album button click
-     */
-    async function handlePlayRandomAlbum() {
-      const result = await roon.playRandomAlbum(selectedGenres);
-      
-      if (result && !result.ignored) {
-        // Use primary artist for activity tracking
-        const primaryArtist = extractPrimaryArtist(result.artist);
-        const activityKey = createActivityKey(result.album, primaryArtist);
-        const artUrl = result.image_key ? 
-          await window.roon.getImage(result.image_key) : null;
-        
-        const activityItem = {
-          title: result.album || '—',
-          subtitle: primaryArtist || '', // Use primary artist for consistency
-          art: artUrl,
-          t: Date.now(),
-          key: activityKey
-        };
-        
-        setActivity(previousActivity => 
-          [activityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
-        );
-      }
-    }
+	/**
+	 * Handles Play Random Album button click
+	 */
+	async function handlePlayRandomAlbum() {
+	  // Convert selected genre names to full genre objects with album counts
+	  const selectedGenreObjects = selectedGenres.map(genreName => {
+	    const genreObj = roon.genres.find(g => g.title === genreName);
+	    if (!genreObj) {
+	      console.warn(`Genre "${genreName}" not found in genre list`);
+	      return null;
+	    }
+	    return genreObj;
+	  }).filter(Boolean); // Remove any null entries
+  
+	  console.log('[UI] Sending genre objects:', selectedGenreObjects);
+  
+	  const result = await roon.playRandomAlbum(selectedGenreObjects);
+  
+	  if (result && !result.ignored) {
+	    // Use primary artist for activity tracking
+	    const primaryArtist = extractPrimaryArtist(result.artist);
+	    const activityKey = createActivityKey(result.album, primaryArtist);
+	    const artUrl = result.image_key ? 
+	      await window.roon.getImage(result.image_key) : null;
+    
+	    const activityItem = {
+	      title: result.album || '—',
+	      subtitle: primaryArtist || '', // Use primary artist for consistency
+	      art: artUrl,
+	      t: Date.now(),
+	      key: activityKey
+	    };
+    
+	    setActivity(previousActivity => 
+	      [activityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
+	    );
+	  }
+	}
 
     /**
      * Handles More from Artist button click
