@@ -1,52 +1,51 @@
 # Roon Random Album
 
-A beautiful macOS desktop application that connects to your Roon music server to intelligently play random albums with genre filtering, transport controls, and activity tracking.
-
-![Roon Random Album Screenshot](./assets/screenshot.png)
+A macOS desktop application for discovering music through intelligent random album selection from your Roon library. Built with Electron and React, this app connects to your Roon Core to provide weighted genre filtering, artist exploration, and smart session tracking.
 
 ## Features
 
-### 🎲 Intelligent Random Selection
-- Play truly random albums from your music library
-- Smart filtering to avoid recently played albums in the current session
-- Automatic session history management
+### 🎲 Smart Random Album Selection
+- **Weighted Genre Selection**: Genres with more albums have proportionally higher chances of being selected
+- **Session Tracking**: Avoids repeating albums within the same session until all options are exhausted
+- **Multi-Genre Support**: Select multiple genres for varied listening experiences
 
-### 🎵 Genre-Based Filtering
-- Filter random selections by one or multiple genres
-- Real-time genre list with album counts
-- Toggle-based genre selection interface
-- Automatic genre discovery from your Roon library
+### 🎵 Now Playing Integration
+- **Real-time Display**: Shows current track, album, artist, and cover art
+- **Transport Controls**: Play, pause, next, previous with keyboard shortcuts
+- **Volume Control**: Integrated volume slider for supported zones
 
-### 🎛️ Full Transport Control
-- Play/pause, next/previous track controls
-- Volume control with real-time slider
-- Zone selection and management
-- Real-time now playing information with album art
+### 🎨 Artist Discovery
+- **More from Artist**: Intelligent exploration of an artist's discography
+- **Smart Cycling**: Plays through all other albums by an artist before repeating
+- **Session Memory**: Remembers what you've heard to ensure variety
 
-### 🎨 Modern Interface
-- Clean, native macOS design language
-- Dark/light mode support (follows system preference)
-- Responsive layout with three-panel design
-- Real-time activity feed showing recently played albums
+### 📱 Modern Interface
+- **Clean Design**: Adaptive light/dark theme based on system preferences
+- **Activity Feed**: Visual history of recently played albums with replay functionality
+- **Responsive Layout**: Three-column grid optimizing space for different content types
 
-### ⚡ Advanced Features
-- "More from Artist" - discover other albums by the current artist
-- Keyboard shortcuts for common actions
-- Activity history with click-to-replay functionality
-- Automatic Roon Core discovery and pairing
+### ⌨️ Keyboard Shortcuts
+- `Space` - Play/Pause
+- `→` - Next track
+- `←` - Previous track
+- `R` - Play random album
+- `A` - More from current artist
 
-## Requirements
+## Screenshots
 
-- **macOS 10.15** or later
-- **Roon Core** running on your network
-- **Node.js 16+** (for development)
+The app features a clean three-column layout:
+- **Left**: Now Playing with cover art and transport controls
+- **Center**: Genre filter with toggleable selection and album counts
+- **Right**: Activity feed showing recently played albums
 
 ## Installation
 
-### Option 1: Download Release (Recommended)
+### Option 1: Download Release
 1. Download the latest `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
 2. Open the DMG and drag the app to your Applications folder
 3. Launch "Roon Random Album" from Applications
+
+Code is not signed, launch using right-click → "Open" the first time
 
 ### Option 2: Build from Source
 ```bash
@@ -64,75 +63,85 @@ npm run dev
 npm run make
 ```
 
-## Setup & First Use
+## Setup
 
-1. **Launch the app** - Roon Random Album will automatically discover your Roon Core
-2. **Authorize the extension** - In Roon, go to Settings → Extensions and enable "Roon Random Album"
-3. **Select your zone** - Choose your preferred audio output zone from the dropdown
-4. **Start playing** - Click "Play Random Album" or use the keyboard shortcut `R`
+### First Launch
+1. Start the app
+2. Ensure your Roon Core is running on the same network
+3. The app will automatically discover and attempt to pair with your Roon Core
+4. Authorize the connection in Roon (Settings > Extensions)
+5. Select your preferred output zone from the dropdown
+
+### Pairing with Roon
+The app uses Roon's official API and requires authorization:
+- Connection tokens are automatically managed and persisted
+- Pairing status is displayed in the top toolbar
+- No manual configuration required
 
 ## Usage
 
-### Basic Controls
-- **Play Random Album** - Click the dice button or press `R`
-- **Transport Controls** - Use the play/pause, next/previous buttons
-- **Keyboard Shortcuts**:
-  - `Space` - Play/Pause
-  - `R` - Play Random Album  
-  - `A` - More from Current Artist
-  - `←/→` - Previous/Next Track
+### Basic Operation
+1. **Select Genres** (optional): Toggle genres in the center panel to filter your selection
+2. **Choose Output Zone**: Select your desired audio output from the toolbar dropdown  
+3. **Play Random Album**: Click the dice button or press `R` to start playback
 
 ### Genre Filtering
-1. Open the **Filter by Genre** panel
-2. Toggle genres on/off to include them in random selection
-3. Use **Clear Selections** to remove all filters
-4. Click **Reload Genres** to refresh the genre list
+- **No Selection**: Chooses from your entire album library
+- **Single Genre**: Plays only albums from that genre
+- **Multiple Genres**: Uses weighted selection based on album counts per genre
+- **Album Counts**: Numbers show how many albums each genre contains
+
+### Artist Exploration
+- Use **"More from Artist"** button to explore the current artist's discography
+- Smart session tracking ensures you hear different albums before repeats
+- Automatically cycles through the artist's entire catalog
 
 ### Activity Feed
-- View recently played albums in the **Activity** panel
+- Visual history of recently played albums
 - Click any album to replay it instantly
 - Timestamps show when each album was played
 
-### Advanced Features
-- **More from Artist** - Discovers and plays another album by the current artist
-- **Zone Management** - Switch between different Roon output zones
-- **Volume Control** - Adjust volume directly from the app (when supported by your zone)
+## Architecture
 
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Space` | Play/Pause |
-| `R` | Play Random Album |
-| `A` | More from Current Artist |
-| `←` | Previous Track |
-| `→` | Next Track |
-
-## Technical Details
-
-### Architecture
-- **Frontend**: React 18 with vanilla JavaScript (no build tools)
-- **Backend**: Electron with Node.js ES modules
-- **Roon Integration**: Official Roon API libraries
+### Technology Stack
+- **Frontend**: React 18 with vanilla JavaScript (no JSX compilation)
+- **Backend**: Electron main process with Node.js
+- **Roon Integration**: Official Roon Labs API packages
 - **Storage**: electron-store for persistent settings
+- **Styling**: CSS custom properties with system theme adaptation
 
-### File Structure
+### Project Structure
 ```
-├── main.js              # Electron main process
-├── roonService.js       # Roon API integration
-├── ipcHandlers.js       # IPC communication layer
-├── preload.cjs          # Secure IPC bridge
-└── renderer/
-    ├── index.html       # Main UI template
-    └── index.js         # React application
+├── main.js              # Electron main process entry point
+├── roonService.js       # Core Roon API integration
+├── ipcHandlers.js       # IPC communication bridge
+├── preload.cjs          # Secure renderer-main communication
+├── renderer/
+│   ├── index.html       # Main UI template
+│   └── index.js         # React application logic
+├── assets/              # Application icons and resources
+└── forge.config.cjs     # Electron Forge build configuration
 ```
 
-### API Integration
-The app uses official Roon Labs API libraries:
-- `node-roon-api` - Core connection and discovery
-- `node-roon-api-browse` - Music library browsing
-- `node-roon-api-transport` - Playback control
-- `node-roon-api-image` - Album art retrieval
+### Key Components
+- **Roon Service**: Handles all music library operations and playback
+- **IPC Layer**: Secure communication between UI and music services  
+- **Session Management**: Tracks played albums and preferences
+- **Genre Engine**: Weighted random selection with caching
+- **Transport Integration**: Real-time playback control and status
+
+## Configuration
+
+### Persistent Settings
+The app automatically saves:
+- Roon Core pairing tokens
+- Last selected output zone
+- Genre filter preferences
+- Window position and size
+
+### Data Storage
+- **macOS**: `~/Library/Application Support/Roon Random Album/`
+- **Config File**: `config.json` contains all persistent state
 
 ## Development
 
@@ -142,81 +151,79 @@ node --version  # Should be 16.0.0 or higher
 npm --version   # Should be 8.0.0 or higher
 ```
 
-### Development Workflow
+### Available Scripts
+- `npm start` - Run the app in production mode
+- `npm run dev` - Run with development debugging enabled
+- `npm run make` - Build distributable packages
+- `npm run package` - Package without creating installers
+
+### Building Distribution
 ```bash
-# Install dependencies
-npm install
-
-# Run in development mode with hot reload
-npm run dev
-
-# Build for distribution
 npm run make
-
-# Package without building installer
-npm run package
 ```
+Creates:
+- **DMG installer** for easy macOS distribution
+- **ZIP archive** for manual installation
+- Output in `out/` directory
 
-### Building for Distribution
-The app uses Electron Forge for building:
-```bash
-# Create DMG for macOS
-npm run make
-
-# Output will be in ./out/make/
-```
-
-## Configuration
-
-Settings are automatically saved to:
-- **macOS**: `~/Library/Preferences/com.markmcc.roonrandom.plist`
-
-The app stores:
-- Roon Core pairing token
-- Last selected zone
-- Genre filter preferences
-- Window position and size
+### Code Style
+- ES6 modules throughout
+- Functional React components with hooks
+- Comprehensive error handling
+- Extensive logging for debugging
 
 ## Troubleshooting
 
 ### Connection Issues
-- **Can't find Roon Core**: Ensure Roon Core and the app are on the same network
-- **Extension not appearing**: Check Roon Settings → Extensions and look for "Roon Random Album"
-- **Pairing fails**: Try restarting both Roon Core and the app
+- Ensure Roon Core is running and discoverable
+- Check that both devices are on the same network
+- Restart the app if pairing fails
+- Verify firewall settings allow local network communication
 
-### Playback Issues
-- **No zones available**: Ensure you have audio devices configured in Roon
-- **Transport controls don't work**: Check that your selected zone supports the requested operation
-- **No albums found**: Verify you have music in your Roon library and try refreshing genres
+### Audio Playback
+- Confirm your output zone is powered on and available
+- Check Roon's audio settings if no zones appear
+- Volume control requires compatible Roon-managed devices
 
 ### Performance
-- **Slow genre loading**: Large libraries may take time to scan; this is cached for 1 hour
-- **App becomes unresponsive**: Restart the app and check Roon Core connectivity
+- Genre list is cached for 1 hour to improve responsiveness
+- Large libraries (>10,000 albums) may take longer for initial genre loading
+- Session history is memory-only and resets on app restart
 
-## Contributing
+## Technical Notes
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Roon API Integration
+- Uses official `node-roon-api` packages from Roon Labs
+- Implements proper pairing and discovery protocols
+- Handles real-time zone and transport updates
+- Respects Roon's browsing and playback APIs
+
+### Security
+- Content Security Policy prevents code injection
+- Sandboxed renderer with controlled IPC communication
+- No network access from renderer process
+- Secure token storage with OS-level encryption
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see LICENSE file for details.
 
-## Acknowledgments
+## Contributing
 
-- Built with [Electron](https://electronjs.org/) and [React](https://reactjs.org/)
-- Integrates with [Roon Labs API](https://github.com/RoonLabs/)
-- Uses official Roon API packages under Apache 2.0 license
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Test thoroughly with your Roon setup
+4. Submit a pull request with clear description
 
-## Author
+## Support
 
-**Mark McClusky**
-- Email: mark@mcclusky.com
-- GitHub: [@markmcclusky](https://github.com/markmcclusky)
+For issues or questions:
+- Check existing GitHub issues
+- Verify Roon Core connectivity first
+- Include app version and macOS version in reports
+- Console logs help diagnose connection problems
 
 ---
 
-*Roon Random Album is not affiliated with or endorsed by Roon Labs LLC.*
+**Note**: This application requires an active Roon subscription and compatible Roon Core installation.
