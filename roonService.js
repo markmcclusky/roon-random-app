@@ -1,6 +1,6 @@
 /**
  * Roon Service - Core integration with Roon's API
- * 
+ *
  * This module handles all communication with Roon Labs' music server including:
  * - Core connection and pairing
  * - Zone management and transport controls
@@ -9,18 +9,38 @@
  * - Session management and play history
  */
 
+import { app } from 'electron';
+import fs from 'fs';
+import path from 'path';
+
 import RoonApi from 'node-roon-api';
 import RoonApiBrowse from 'node-roon-api-browse';
 import RoonApiTransport from 'node-roon-api-transport';
 import RoonApiImage from 'node-roon-api-image';
-import { app } from 'electron';
 
 // ==================== CONSTANTS ====================
 
 const GENRE_CACHE_DURATION = 3600 * 1000; // 1 hour in milliseconds
-const MAX_RANDOM_ATTEMPTS = 50; // Maximum attempts to find unplayed album
-const BROWSE_PAGE_SIZE = 200; // Number of items to fetch per browse request
-const DEFAULT_IMAGE_SIZE = 256; // Default image dimensions
+const MAX_RANDOM_ATTEMPTS = 50;           // Maximum attempts to find unplayed album
+const BROWSE_PAGE_SIZE = 200;             // Number of items to fetch per browse request
+const DEFAULT_IMAGE_SIZE = 512;           // Default image dimensions
+
+// Persisted state (token) storage — lives in a writable, stable location
+const ROON_DATA_DIR = app.getPath('userData');               // e.g. ~/Library/Application Support/Roon Random App
+const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
+
+function readConfigFile() {
+  try {
+    return JSON.parse(fs.readFileSync(ROON_CONFIG_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeConfigFile(obj) {
+  fs.mkdirSync(ROON_DATA_DIR, { recursive: true });
+  fs.writeFileSync(ROON_CONFIG_PATH, JSON.stringify(obj, null, 2));
+}
 
 // Extension identification for Roon
 const EXTENSION_CONFIG = {
@@ -183,17 +203,26 @@ export function getZoneNowPlaying(zoneId) {
 function connectToRoon() {
   roon = new RoonApi({
     ...EXTENSION_CONFIG,
-    token: store.get('token'),
-    save_token: (token) => store.set('token', token),
+
+    // Persist the pairing token + paired_core_id in userData/config.json
+    get_persisted_state: () => {
+      const cfg = readConfigFile();
+      return cfg.roonstate ? cfg.roonstate : {};
+    },
+    set_persisted_state: (state) => {
+      const all = readConfigFile();
+      all.roonstate = state; // { tokens: { [core_id]: token }, paired_core_id: "..." }
+      writeConfigFile(all);
+    },
 
     core_paired: handleCorePaired,
     core_unpaired: handleCoreUnpaired
   });
 
-  roon.init_services({ 
-    required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage] 
+  roon.init_services({
+    required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage]
   });
-  
+
   roon.start_discovery();
 }
 

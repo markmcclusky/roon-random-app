@@ -736,21 +736,37 @@ const nowPlayingCard = e('div', { className: 'card' },
       }, 'More from Artist')
     ),
     
-    // Right side: Track info and controls
-    e('div', { className: 'np-details' },
-      // Track information - DISPLAY full artist but USE primary for functionality
-      e('div', null,
-        e('div', { 
-          style: { fontSize: 20, fontWeight: 700, marginBottom: 4 } 
-        }, nowPlaying.song || '—'),
-        e('div', { 
-          style: { fontWeight: 700, marginBottom: 4 } 
-        }, nowPlaying.album || ''),
-        e('div', { 
-          className: 'muted', 
-          style: { fontSize: 15, marginBottom: 12 } 
-        }, nowPlaying.artist || '') // Show full artist name for user
-      ),
+// Right side: Track info and controls
+e('div', { className: 'np-details' },
+  // Track information - DISPLAY full artist but USE primary for functionality
+  e('div', null,
+    e('div', {
+      style: {
+        fontSize: 20,
+        fontWeight: 700,
+        marginBottom: 6,
+        lineHeight: 1.12,
+        overflowWrap: 'anywhere'
+      }
+    }, nowPlaying.song || '—'),
+    e('div', {
+      style: {
+        fontWeight: 500,
+        marginBottom: 6,
+        lineHeight: 1.12,
+        overflowWrap: 'anywhere'
+      }
+    }, nowPlaying.album || ''),
+    e('div', {
+      className: 'muted',
+      style: {
+        fontSize: 15,
+        marginBottom: 12,
+        lineHeight: 1.12,
+        overflowWrap: 'anywhere'
+      }
+    }, nowPlaying.artist || '') // Show full artist name for user
+  ),
       
       // Transport controls and volume
       e('div', { className: 'controls-row' },
