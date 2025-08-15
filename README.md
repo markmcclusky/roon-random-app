@@ -224,6 +224,12 @@ For issues or questions:
 - Include app version and macOS version in reports
 - Console logs help diagnose connection problems
 
+## Acknowledgments
+
+- Built with [Electron](https://electronjs.org/) and [React](https://reactjs.org/)
+- Integrates with [Roon Labs API](https://github.com/RoonLabs/)
+- Uses official Roon API packages under Apache 2.0 license
+
 ---
 
 **Note**: This application requires an active Roon subscription and compatible Roon Core installation.
