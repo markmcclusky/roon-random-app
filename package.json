@@ -1,6 +1,6 @@
 {
   "name": "roon-random-app",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "productName": "Roon Random Album",
   "description": "Mac desktop app for playing random Roon albums with intelligent filtering and genre selection",
   "main": "main.js",
