@@ -33,6 +33,8 @@ A macOS desktop application for discovering music through intelligent random alb
 
 ## Screenshots
 
+![Main Interface](screenshots/main-interface.png)
+
 The app features a clean three-column layout:
 - **Left**: Now Playing with cover art and transport controls
 - **Center**: Genre filter with toggleable selection and album counts
