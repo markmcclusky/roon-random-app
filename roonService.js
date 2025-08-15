@@ -23,7 +23,7 @@ import RoonApiImage from 'node-roon-api-image';
 const GENRE_CACHE_DURATION = 3600 * 1000; // 1 hour in milliseconds
 const MAX_RANDOM_ATTEMPTS = 50;           // Maximum attempts to find unplayed album
 const BROWSE_PAGE_SIZE = 200;             // Number of items to fetch per browse request
-const DEFAULT_IMAGE_SIZE = 256;           // Default image dimensions
+const DEFAULT_IMAGE_SIZE = 512;           // Default image dimensions
 
 // Persisted state (token) storage — lives in a writable, stable location
 const ROON_DATA_DIR = app.getPath('userData');               // e.g. ~/Library/Application Support/Roon Random App
