@@ -21,7 +21,7 @@ A macOS desktop application for discovering music through intelligent random alb
 
 ### 📱 Modern Interface
 - **Clean Design**: Adaptive light/dark theme based on system preferences
-- **Activity Feed**: Visual history of recently played albums with replay functionality
+- **Activity Feed**: Visual history of recently played albums from the app with replay functionality
 - **Responsive Layout**: Three-column grid optimizing space for different content types
 
 ### ⌨️ Keyboard Shortcuts
@@ -38,7 +38,7 @@ A macOS desktop application for discovering music through intelligent random alb
 The app features a clean three-column layout:
 - **Left**: Now Playing with cover art and transport controls
 - **Center**: Genre filter with toggleable selection and album counts
-- **Right**: Activity feed showing recently played albums
+- **Right**: Activity feed showing recently played albums from within the app. Click to go back to it.
 
 ## Installation
 
