@@ -500,9 +500,7 @@ async function navigateToGenreAlbums(root, genreFilters) {
       break;
     }
   }
-  
-  console.log(`[Weighted Selection] Picked "${targetGenre.title}" (${targetGenre.albumCount} albums) from total pool of ${totalAlbums}`);
-  
+    
   const targetGenreLower = targetGenre.title.toLowerCase();
   
   // Rest of the function stays the same, but use targetGenre.title instead of targetGenre
@@ -611,7 +609,6 @@ async function selectRandomAlbum(targetKey) {
   
   // If no unplayed album found, clear history and try once more
   if (!selectedAlbum) {
-    console.log('[roonService] Could not find unplayed album. Clearing session history.');
     playedThisSession.clear();
     
     const randomIndex = Math.floor(Math.random() * totalAlbums);
@@ -766,7 +763,6 @@ export async function playAlbumByName(albumName, artistName) {
  */
 export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
   if (isDeepDiveInProgress) {
-    console.log('[DEEP DIVE] IGNORED: A deep dive is already in progress.');
     return { ignored: true };
   }
   
@@ -778,8 +774,6 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
     }
 
     const zoneId = await ensureValidZone();
-
-    console.log(`[DEEP DIVE] Starting for ${artistName} (excluding: ${currentAlbumName})`);
     
     // Initialize session tracking for this artist if needed
     if (!artistSessionHistory.has(artistName)) {
@@ -835,11 +829,6 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
     const allAlbums = (artistPage.items || []).filter(item => 
       item.hint === 'list' && item.subtitle === artistName
     );
-	
-	// DEBUG: Log all albums and the current album for comparison
-	console.log(`[DEEP DIVE DEBUG] Current album to exclude: "${currentAlbumName}"`);
-	console.log(`[DEEP DIVE DEBUG] All albums found:`, allAlbums.map(a => `"${a.title}"`));
-	console.log(`[DEEP DIVE DEBUG] Played this session:`, Array.from(playedByArtist));
     
 	// Filter out albums we've played this session (including the starting album)
 	let availableAlbums = allAlbums.filter(album => 
@@ -848,7 +837,6 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
     
     // If no unplayed albums available, clear this artist's history and try again
     if (availableAlbums.length === 0) {
-      console.log(`[DEEP DIVE] No unplayed albums found for ${artistName}, clearing session history`);
       playedByArtist.clear();
       
       // Try again with cleared history
@@ -863,14 +851,12 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
     
     // Pick and play random album
     const selectedAlbum = availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
-    console.log(`[DEEP DIVE] Selected: "${selectedAlbum.title}" (${availableAlbums.length} available options)`);
     
     // Mark this album as played for this artist
     playedByArtist.add(selectedAlbum.title);
     
     await playAlbum(selectedAlbum, zoneId);
     
-    console.log(`[DEEP DIVE] SUCCESS: "${selectedAlbum.title}"`);
     return { 
       album: selectedAlbum.title, 
       artist: selectedAlbum.subtitle, 
@@ -921,7 +907,6 @@ export function getImageDataUrl(imageKey, options = {}) {
  */
 export function clearSessionHistory() {
   playedThisSession.clear();
-  console.log('[roonService] Session play history cleared.');
   return true;
 }
 

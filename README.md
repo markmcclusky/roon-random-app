@@ -207,9 +207,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [Roon Labs](https://roonlabs.com/) for the excellent music management platform and APIs
-- The Electron and React communities for the foundational technologies
-- All contributors and users who help improve this project
+- Built with [Electron](https://electronjs.org/) and [React](https://reactjs.org/)
+- Integrates with [Roon Labs API](https://github.com/RoonLabs/)
+- Uses official Roon API packages under Apache 2.0 license
 
 ## Author
 
