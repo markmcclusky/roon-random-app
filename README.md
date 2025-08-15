@@ -208,7 +208,7 @@ Creates:
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](https://github.com/markmcclusky/roon-random-app/blob/main/LICENSE) file for details.
 
 ## Contributing
 
