@@ -47,7 +47,7 @@ The app features a clean three-column layout:
 2. Open the DMG and drag the app to your Applications folder
 3. Launch "Roon Random Album" from Applications
 
-Code is not signed, launch using right-click → "Open" the first time
+Code is not signed, launch using right-click → "Open" the first time. Or after attempting to launch, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
 
 ### Option 2: Build from Source
 ```bash
