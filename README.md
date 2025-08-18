@@ -49,6 +49,9 @@ The app features a clean three-column layout:
 
 Code is not signed, launch using right-click → "Open" the first time. Or after attempting to launch, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
 
+If you get an error message stating that the app is damaged and can't be opened, it's been blocked by Gatekeeper. Go to the terminal and run: `xattr -dr com.apple.quarantine /path/to/Roon\ Random\ Album.app` which should clear the error and allow you to launch.
+
+
 ### Option 2: Build from Source
 ```bash
 # Clone the repository
