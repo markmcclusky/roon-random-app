@@ -259,17 +259,26 @@
 
     /* ==================== TRANSPORT CONTROLS ==================== */
     
-    .controls-row {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-    }
-    
-    .transport-controls {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+	.controls-row {
+	  display: grid;
+	  grid-template-columns: auto 1fr;
+	  align-items: center;
+	  gap: 24px;
+	  min-height: 40px;
+	}
+
+	.transport-controls {
+	  display: flex;
+	  align-items: center;
+	  gap: 12px;
+	  justify-self: start; /* Keep transport controls left-aligned */
+	}
+
+	.volume-area {
+	  justify-self: stretch; /* Volume area takes remaining space */
+	  min-width: 140px; /* Force minimum width even when empty */
+	  min-height: 24px; /* Force minimum height */
+	}
     
     .btn-icon {
       appearance: none;
@@ -298,6 +307,12 @@
     .btn-icon:disabled img {
       opacity: 0.4;
     }
+
+	.volume-placeholder {
+	  flex-grow: 1;
+	  height: 24px; /* Same height as volume slider */
+	  visibility: hidden; /* Takes up space but invisible */
+	}
     
     .volume-slider {
       flex-grow: 1;

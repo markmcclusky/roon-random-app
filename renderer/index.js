@@ -781,46 +781,47 @@ e('div', { className: 'np-details' },
     }, nowPlaying.artist || '') // Show full artist name for user
   ),
       
-      // Transport controls and volume
-      e('div', { className: 'controls-row' },
-        e('div', { className: 'transport-controls' },
-          e('button', { 
-            className: 'btn-icon', 
-            onClick: () => roon.transportControl('previous') 
-          }, 
-            e('img', { src: './images/previous-100.png', alt: 'Previous' })
-          ),
-          e('button', { 
-            className: 'btn-icon btn-playpause', 
-            onClick: () => roon.transportControl('playpause') 
-          }, 
-            e('img', { 
-              src: isPlaying ? './images/pause-100.png' : './images/play-100.png', 
-              alt: 'Play/Pause' 
-            })
-          ),
-          e('button', { 
-            className: 'btn-icon', 
-            onClick: () => roon.transportControl('next') 
-          }, 
-            e('img', { src: './images/next-100.png', alt: 'Next' })
-          )
-        ),
-        
-        // Volume slider (if available)
-        hasVolumeControl ? e('input', {
-          className: 'volume-slider',
-          type: 'range',
-          min: currentZone.volume.min,
-          max: currentZone.volume.max,
-          step: currentZone.volume.step,
-          value: localVolume !== null ? localVolume : currentZone.volume.value,
-          onInput: (event) => setLocalVolume(event.target.value),
-          onChange: (event) => roon.changeVolume(event.target.value)
-        }) : null
-      )
+e('div', { className: 'controls-row' },
+  e('div', { className: 'transport-controls' },
+    e('button', { 
+      className: 'btn-icon', 
+      onClick: () => roon.transportControl('previous') 
+    }, 
+      e('img', { src: './images/previous-100.png', alt: 'Previous' })
+    ),
+    e('button', { 
+      className: 'btn-icon btn-playpause', 
+      onClick: () => roon.transportControl('playpause') 
+    }, 
+      e('img', { 
+        src: isPlaying ? './images/pause-100.png' : './images/play-100.png', 
+        alt: 'Play/Pause' 
+      })
+    ),
+    e('button', { 
+      className: 'btn-icon', 
+      onClick: () => roon.transportControl('next') 
+    }, 
+      e('img', { src: './images/next-100.png', alt: 'Next' })
     )
+  ),
+  
+  // Volume area - always present but conditionally populated
+  e('div', { className: 'volume-area' },
+    hasVolumeControl ? e('input', {
+      className: 'volume-slider',
+      type: 'range',
+      min: currentZone.volume.min,
+      max: currentZone.volume.max,
+      step: currentZone.volume.step,
+      value: localVolume !== null ? localVolume : currentZone.volume.value,
+      onInput: (event) => setLocalVolume(event.target.value),
+      onChange: (event) => roon.changeVolume(event.target.value)
+    }) : null
   )
+)
+)
+)
 );
 
     // ==================== RENDER GENRE FILTER CARD ====================
