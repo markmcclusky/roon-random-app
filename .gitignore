@@ -42,7 +42,6 @@ build/
 scripts/
 .env
 /dist
-
 --apple-id
 --team-id
 roon-random-app@1.0.2
