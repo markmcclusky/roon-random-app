@@ -1,6 +1,6 @@
 # Roon Random Album
 
-A macOS desktop application for discovering music through intelligent random album selection from your Roon library. Built with Electron and React, this app connects to your Roon Core to provide weighted genre filtering, artist exploration, and smart session tracking.
+A desktop application for discovering music through intelligent random album selection from your Roon library. Built with Electron and React, this app connects to your Roon Core to provide weighted genre filtering, artist exploration, and smart session tracking.
 
 ## Features
 
@@ -42,7 +42,7 @@ The app features a clean three-column layout:
 
 ## Installation
 
-### Option 1: Download Release
+### Option 1: Download Releases for MacOS
 1. Download the latest `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
 2. Open the DMG and drag the app to your Applications folder
 3. Launch "Roon Random Album" from Applications
@@ -51,6 +51,7 @@ Code is signed, launch using right-click → "Open" the first time. Or after att
 
 If you get an error message stating that the app is damaged and can't be opened, it's been blocked by Gatekeeper. Go to the terminal and run: `xattr -dr com.apple.quarantine /path/to/Roon\ Random\ Album.app` which should clear the error and allow you to launch.
 
+If anyone wants to help build Windows versions, I'd be very grateful!
 
 ### Option 2: Build from Source
 ```bash
