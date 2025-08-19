@@ -1,6 +1,6 @@
 {
   "name": "roon-random-app",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "productName": "Roon Random Album",
   "description": "Mac desktop app for playing random Roon albums with intelligent filtering and genre selection",
   "main": "main.js",
@@ -31,6 +31,12 @@
     "make": "electron-forge make",
     "package": "electron-forge package",
     "publish": "electron-forge publish",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:mac-intel": "electron-builder --mac --x64",
+    "build:mac-arm": "electron-builder --mac --arm64",
+    "build:mac-both": "electron-builder --mac --x64 --arm64",
+    "dist": "npm run build",
     "lint": "echo 'Linting not configured yet'",
     "test": "echo 'Tests not configured yet'"
   },
@@ -117,16 +123,23 @@
       "node_modules/**/*"
     ],
     "mac": {
-      "category": "public.app-category.music",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ]
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+	  "target": [
+	    {
+	      "target": "dmg",
+	      "arch": ["arm64", "x64"]
+	    },
+	    {
+	      "target": "zip",
+	      "arch": ["arm64", "x64"]
+	    }
+	  ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
+   }
   }
-}
