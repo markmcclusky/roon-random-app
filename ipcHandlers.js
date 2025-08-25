@@ -25,6 +25,7 @@ const IPC_CHANNELS = {
   
   // Music browsing and selection
   LIST_GENRES: 'roon:listGenres',
+  GET_SUBGENRES: 'roon:getSubgenres',
   PLAY_RANDOM_ALBUM: 'roon:playRandomAlbum',
   PLAY_ALBUM_BY_NAME: 'roon:playAlbumByName',
   PLAY_RANDOM_ALBUM_BY_ARTIST: 'roon:playRandomAlbumByArtist',
@@ -160,6 +161,21 @@ function registerMusicHandlers() {
       throw error;
     }
   });
+
+  /**
+   * Fetches subgenres for a specific genre
+   * @param {string} genreTitle - The title of the parent genre
+   * @returns {Promise<Array>} Array of subgenre objects with 10+ albums
+   */
+  ipcMain.handle(IPC_CHANNELS.GET_SUBGENRES, async (_event, genreTitle) => {
+    try {
+      return await RoonService.getSubgenres(genreTitle);
+    } catch (error) {
+      console.error(`Failed to get subgenres for ${genreTitle}:`, error);
+      throw error;
+    }
+  });
+
 
   /**
    * Picks and plays a random album based on genre filters
