@@ -372,6 +372,7 @@ export async function listGenres() {
             genres.push({
               title: item.title.trim(),
               albumCount: albumCount,
+              expandable: albumCount >= 50, // Mark genres with 50+ albums as expandable
             });
           }
         }
@@ -400,6 +401,92 @@ export async function listGenres() {
     
   } catch (error) {
     console.error('Failed to load genres:', error);
+    throw error;
+  }
+}
+
+
+/**
+ * Fetches subgenres for a specific genre
+ * @param {string} genreTitle - The title of the parent genre
+ * @returns {Promise<Array>} Array of subgenre objects with 10+ albums
+ */
+export async function getSubgenres(genreTitle) {
+  if (!browseService) {
+    throw new Error('Not connected to a Roon Core');
+  }
+
+  try {
+    // Navigate to genres section
+    await browseAsync({ hierarchy: 'browse', pop_all: true });
+    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    
+    const genresNode = findItemCaseInsensitive(root.items, 'Genres');
+    if (!genresNode?.item_key) {
+      throw new Error('Could not locate Genres in this core.');
+    }
+    
+    await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
+    
+    // Find the specific genre
+    let genreItem = null;
+    let offset = 0;
+    const targetGenreLower = genreTitle.toLowerCase();
+    
+    while (!genreItem) {
+      const page = await loadAsync({ 
+        hierarchy: 'browse', 
+        item_key: genresNode.item_key, 
+        offset, 
+        count: BROWSE_PAGE_SIZE 
+      });
+      
+      const items = page.items || [];
+      if (!items.length) break;
+      
+      genreItem = items.find(item => 
+        (item.title || '').trim().toLowerCase() === targetGenreLower
+      );
+      
+      offset += items.length;
+    }
+    
+    if (!genreItem?.item_key) {
+      throw new Error(`Genre '${genreTitle}' not found.`);
+    }
+    
+    // Browse into the genre to get subgenres
+    await browseAsync({ hierarchy: 'browse', item_key: genreItem.item_key });
+    const genrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    
+    const subGenres = [];
+    const items = genrePage.items || [];
+    
+    for (const item of items) {
+      if (item.hint === 'list' && item.subtitle && item.subtitle.includes('Albums')) {
+        // Extract album count
+        const albumCountMatch = item.subtitle.match(/(\d+)\s+Albums?/);
+        const albumCount = albumCountMatch ? parseInt(albumCountMatch[1], 10) : 0;
+        
+        // Only include subgenres with 10+ albums
+        if (albumCount >= 10) {
+          subGenres.push({
+            title: item.title,
+            albumCount: albumCount,
+            parentGenre: genreTitle,
+            item_key: item.item_key // Store for later navigation
+          });
+        }
+      }
+    }
+    
+    // Sort by album count descending
+    subGenres.sort((a, b) => b.albumCount - a.albumCount);
+    
+    return subGenres;
+    
+  } catch (error) {
+    console.error(`Failed to get subgenres for ${genreTitle}:`, error);
     throw error;
   }
 }
@@ -473,19 +560,12 @@ async function navigateToAlbumList(genreFilters) {
 }
 
 /**
- * Navigates to albums for a specific genre
+ * Navigates to albums for a specific genre or subgenre
  * @param {Object} root - Root browse result
  * @param {Array} genreFilters - Genre filters
  * @returns {Promise<string>} Genre albums item key
  */
 async function navigateToGenreAlbums(root, genreFilters) {
-  const genresNode = findItemCaseInsensitive(root.items, 'Genres');
-  if (!genresNode?.item_key) {
-    throw new Error('Could not locate Genres in this core.');
-  }
-  
-  await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-  
   // Weighted random selection based on album counts
   const totalAlbums = genreFilters.reduce((sum, genre) => sum + genre.albumCount, 0);
   const randomValue = Math.random() * totalAlbums;
@@ -500,10 +580,88 @@ async function navigateToGenreAlbums(root, genreFilters) {
       break;
     }
   }
+  
+  // If this is a subgenre, navigate to it dynamically
+  if (targetGenre.isSubgenre && targetGenre.parentGenre) {
+    // Navigate to the parent genre first
+    const genresNode = findItemCaseInsensitive(root.items, 'Genres');
+    if (!genresNode?.item_key) {
+      throw new Error('Could not locate Genres in this core.');
+    }
     
+    await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
+    
+    // Find the parent genre
+    const parentGenreLower = targetGenre.parentGenre.toLowerCase();
+    let parentGenreItem = null;
+    let offset = 0;
+    
+    while (!parentGenreItem) {
+      const page = await loadAsync({ 
+        hierarchy: 'browse', 
+        item_key: genresNode.item_key, 
+        offset, 
+        count: BROWSE_PAGE_SIZE 
+      });
+      
+      const items = page.items || [];
+      if (!items.length) break;
+      
+      parentGenreItem = items.find(item => 
+        (item.title || '').trim().toLowerCase() === parentGenreLower
+      );
+      
+      offset += items.length;
+    }
+    
+    if (!parentGenreItem?.item_key) {
+      throw new Error(`Parent genre '${targetGenre.parentGenre}' not found.`);
+    }
+    
+    // Browse into the parent genre
+    await browseAsync({ hierarchy: 'browse', item_key: parentGenreItem.item_key });
+    const parentPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    
+    // Find the subgenre
+    const subgenreTitle = targetGenre.title.toLowerCase();
+    const subgenreItem = (parentPage.items || []).find(item => 
+      (item.title || '').toLowerCase() === subgenreTitle &&
+      item.hint === 'list' && 
+      item.subtitle && 
+      item.subtitle.includes('Albums')
+    );
+    
+    if (!subgenreItem?.item_key) {
+      throw new Error(`Subgenre '${targetGenre.title}' not found in '${targetGenre.parentGenre}'.`);
+    }
+    
+    // Browse into the subgenre
+    await browseAsync({ hierarchy: 'browse', item_key: subgenreItem.item_key });
+    const subgenrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+    
+    // Look for Albums section within the subgenre
+    const albumsNode = findItemCaseInsensitive(subgenrePage.items, 'Albums') ||
+                      findItemCaseInsensitive(subgenrePage.items, 'All Albums') ||
+                      findItemCaseInsensitive(subgenrePage.items, 'Library Albums');
+    
+    if (albumsNode?.item_key) {
+      await browseAsync({ hierarchy: 'browse', item_key: albumsNode.item_key });
+      return albumsNode.item_key;
+    } else {
+      return subgenreItem.item_key;
+    }
+  }
+  
+  // Handle top-level genres (existing logic)
+  const genresNode = findItemCaseInsensitive(root.items, 'Genres');
+  if (!genresNode?.item_key) {
+    throw new Error('Could not locate Genres in this core.');
+  }
+  
+  await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
+  
   const targetGenreLower = targetGenre.title.toLowerCase();
   
-  // Rest of the function stays the same, but use targetGenre.title instead of targetGenre
   let genreItem = null;
   let offset = 0;
   
@@ -530,7 +688,6 @@ async function navigateToGenreAlbums(root, genreFilters) {
   if (!genreItem?.item_key) {
     throw new Error(`Genre '${targetGenre.title}' not found.`);
   }
-  
   
   await browseAsync({ hierarchy: 'browse', item_key: genreItem.item_key });
   const genrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
