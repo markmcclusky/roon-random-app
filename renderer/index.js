@@ -95,30 +95,6 @@
     );
   }
 
-  /**
-   * Triangle icon for expandable genre indicators
-   * @param {Object} props - SVG props including expanded state
-   * @returns {React.Element} Triangle icon SVG
-   */
-  function TriangleIcon({ expanded, ...props }) {
-    return e('svg', 
-      Object.assign({ 
-        width: 12, 
-        height: 12, 
-        viewBox: '0 0 12 12', 
-        fill: 'currentColor',
-        style: { 
-          transition: 'transform 0.2s ease',
-          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)'
-        }
-      }, props),
-      e('path', { 
-        d: 'M4 2.5L8.5 6L4 9.5V2.5Z',
-        fill: 'currentColor'
-      })
-    );
-  }
-
 // ==================== CUSTOM HOOKS ====================
 
   /**
@@ -381,16 +357,7 @@
    * @returns {React.Element} Genre filter component
    */
   function GenreFilter(props) {
-    const { 
-      allGenres, 
-      selectedGenres, 
-      setSelectedGenres, 
-      roon,
-      expandedGenres,
-      setExpandedGenres,
-      subgenresCache,
-      setSubgenresCache
-    } = props;
+    const { allGenres, selectedGenres, setSelectedGenres, roon } = props;
     const [isReloading, setIsReloading] = useState(false);
 
     /**
@@ -421,55 +388,12 @@
     }
 
     /**
-     * Toggles expansion state of a genre and loads subgenres if needed
-     * @param {string} genreTitle - Genre title to expand/collapse
-     */
-    async function toggleExpansion(genreTitle, event) {
-      event.stopPropagation(); // Prevent genre selection toggle
-      
-      setExpandedGenres(prev => {
-        const newExpanded = new Set(prev);
-        
-        if (newExpanded.has(genreTitle)) {
-          // Collapsing
-          newExpanded.delete(genreTitle);
-        } else {
-          // Expanding - load subgenres if not cached
-          newExpanded.add(genreTitle);
-          
-          if (!subgenresCache.has(genreTitle)) {
-            loadSubgenres(genreTitle);
-          }
-        }
-        
-        return newExpanded;
-      });
-    }
-
-    /**
-     * Loads subgenres for a specific genre
-     * @param {string} genreTitle - Genre to load subgenres for
-     */
-    async function loadSubgenres(genreTitle) {
-      try {
-        const subgenres = await window.roon.getSubgenres(genreTitle);
-        setSubgenresCache(prev => new Map(prev.set(genreTitle, subgenres)));
-      } catch (error) {
-        console.error(`Failed to load subgenres for ${genreTitle}:`, error);
-        setSubgenresCache(prev => new Map(prev.set(genreTitle, [])));
-      }
-    }
-
-    /**
      * Reloads the genre list from Roon
      */
     async function reloadGenres() {
       setIsReloading(true);
       try {
         await roon.refreshGenres();
-        // Clear expansion state and cache when reloading
-        setExpandedGenres(new Set());
-        setSubgenresCache(new Map());
       } finally {
         setIsReloading(false);
       }
@@ -480,17 +404,16 @@
       e('div', { 
         style: { 
           display: 'flex', 
-          alignItems: 'center', 
+          alignItems: 'baseline', 
           justifyContent: 'space-between', 
           flexShrink: 0 
         } 
       },
-        e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Filter by Genre'),
+        e('h2', { style: { marginBottom: 10 } }, 'Filter by Genre'),
         e('button', { 
           className: 'btn-link', 
           onClick: reloadGenres, 
-          disabled: isReloading,
-          style: { transform: 'translateY(-4px)' }
+          disabled: isReloading 
         }, isReloading ? 'Reloading…' : 'Reload Genres')
       ),
 
@@ -499,76 +422,18 @@
         e('div', { className: 'toggle-list' },
           allGenres.map(function(genre) {
             const isActive = selectedGenres.includes(genre.title);
-            const isExpanded = expandedGenres.has(genre.title);
-            const subgenres = subgenresCache.get(genre.title) || [];
             
-            // Create genre items array starting with the main genre
-            const items = [
-              e('div', {
-                key: genre.title,
-                className: 'toggle-item',
-                onClick: () => toggleGenre(genre.title),
-                'data-active': isActive,
-                'data-disabled': isReloading,
-                style: { position: 'relative' }
-              },
-                // Expansion triangle (only for expandable genres)
-                genre.expandable ? e('div', {
-                  className: 'expansion-triangle',
-                  onClick: (event) => toggleExpansion(genre.title, event),
-                  style: {
-                    position: 'absolute',
-                    left: '2px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    cursor: 'pointer',
-                    padding: '2px',
-                    color: 'var(--muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }
-                }, e(TriangleIcon, { expanded: isExpanded, width: 18, height: 18 })) : null,
-                
-                // Genre text with consistent left padding for all genres
-                e('span', { 
-                  style: { 
-                    marginLeft: '22px' 
-                  } 
-                }, `${genre.title} (${genre.albumCount})`),
-                
-                e('div', { className: 'toggle-switch' })
-              )
-            ];
-            
-            // Add subgenres if expanded
-            if (isExpanded && subgenres.length > 0) {
-              subgenres.forEach(subgenre => {
-                const subgenreKey = `${genre.title}::${subgenre.title}`;
-                const isSubgenreActive = selectedGenres.includes(subgenreKey);
-                
-                items.push(
-                  e('div', {
-                    key: subgenreKey,
-                    className: 'toggle-item subgenre-item',
-                    onClick: () => toggleGenre(subgenreKey),
-                    'data-active': isSubgenreActive,
-                    'data-disabled': isReloading,
-                    style: {
-                      marginLeft: '40px',
-                      fontSize: '0.9em',
-                      opacity: '0.9'
-                    }
-                  },
-                    e('span', null, `${subgenre.title} (${subgenre.albumCount})`),
-                    e('div', { className: 'toggle-switch' })
-                  )
-                );
-              });
-            }
-            
-            return items;
-          }).flat() // Flatten the array since each genre can return multiple items
+            return e('div', {
+              key: genre.title,
+              className: 'toggle-item',
+              onClick: () => toggleGenre(genre.title),
+              'data-active': isActive,
+              'data-disabled': isReloading,
+            },
+              e('span', null, `${genre.title} (${genre.albumCount})`),
+              e('div', { className: 'toggle-switch' })
+            );
+          })
         )
       ),
 
@@ -615,10 +480,6 @@
     
     // Genre selection state
     const [selectedGenres, setSelectedGenres] = useState([]);
-    
-    // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
-    const [expandedGenres, setExpandedGenres] = useState(new Set());
-    const [subgenresCache, setSubgenresCache] = useState(new Map());
 
     // Get current zone info
     const currentZone = roon.zones.find(zone => zone.id === roon.state.lastZoneId);
@@ -734,25 +595,12 @@
 	async function handlePlayRandomAlbum() {
 	  // Convert selected genre names to full genre objects with album counts
 	  const selectedGenreObjects = selectedGenres.map(genreName => {
-	    // Check if this is a subgenre (contains ::)
-	    if (genreName.includes('::')) {
-	      const [parentGenre, subgenreTitle] = genreName.split('::');
-	      const subgenres = subgenresCache.get(parentGenre) || [];
-	      const subgenreObj = subgenres.find(sg => sg.title === subgenreTitle);
-	      if (!subgenreObj) {
-	        console.warn(`Subgenre "${subgenreTitle}" not found in ${parentGenre}`);
-	        return null;
-	      }
-	      return { ...subgenreObj, isSubgenre: true };
-	    } else {
-	      // Regular top-level genre
-	      const genreObj = roon.genres.find(g => g.title === genreName);
-	      if (!genreObj) {
-	        console.warn(`Genre "${genreName}" not found in genre list`);
-	        return null;
-	      }
-	      return { ...genreObj, isSubgenre: false };
+	    const genreObj = roon.genres.find(g => g.title === genreName);
+	    if (!genreObj) {
+	      console.warn(`Genre "${genreName}" not found in genre list`);
+	      return null;
 	    }
+	    return genreObj;
 	  }).filter(Boolean); // Remove any null entries
   
 	  console.log('[UI] Sending genre objects:', selectedGenreObjects);
@@ -779,7 +627,6 @@
 	    );
 	  }
 	}
-
 
     /**
      * Handles More from Artist button click
@@ -983,11 +830,7 @@ e('div', { className: 'controls-row' },
       roon: roon,
       allGenres: roon.genres,
       selectedGenres: selectedGenres,
-      setSelectedGenres: setSelectedGenres,
-      expandedGenres: expandedGenres,
-      setExpandedGenres: setExpandedGenres,
-      subgenresCache: subgenresCache,
-      setSubgenresCache: setSubgenresCache
+      setSelectedGenres: setSelectedGenres
     });
 
     // ==================== RENDER ACTIVITY CARD ====================
