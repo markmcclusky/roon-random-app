@@ -6,8 +6,9 @@ A desktop application for discovering music through intelligent random album sel
 
 ### 🎲 Smart Random Album Selection
 - **Weighted Genre Selection**: Genres with more albums have proportionally higher chances of being selected
+- **Hierarchical Genre Filtering**: Expandable genres reveal subgenres for more precise music discovery
 - **Session Tracking**: Avoids repeating albums within the same session until all options are exhausted
-- **Multi-Genre Support**: Select multiple genres for varied listening experiences
+- **Multi-Genre Support**: Select multiple genres and subgenres for varied listening experiences
 
 ### 🎵 Now Playing Integration
 - **Real-time Display**: Shows current track, album, artist, and cover art
@@ -37,7 +38,7 @@ A desktop application for discovering music through intelligent random album sel
 
 The app features a clean three-column layout:
 - **Left**: Now Playing with cover art and transport controls
-- **Center**: Genre filter with toggleable selection and album counts
+- **Center**: Genre filter with toggleable selection, expandable subgenres, and album counts
 - **Right**: Activity feed showing albums recently played albums from within the app. Clicking album plays it again.
 
 ## Installation
@@ -95,7 +96,10 @@ The app uses Roon's official API and requires authorization:
 - **No Selection**: Chooses from your entire album library
 - **Single Genre**: Plays only albums from that genre
 - **Multiple Genres**: Uses weighted selection based on album counts per genre
-- **Album Counts**: Numbers show how many albums each genre contains
+- **Expandable Genres**: Genres with 50+ albums show a triangle icon - click to reveal subgenres
+- **Subgenre Selection**: Subgenres with 10+ albums can be individually selected for targeted discovery
+- **Album Counts**: Numbers show how many albums each genre and subgenre contains
+- **Mixed Selection**: Combine parent genres and specific subgenres for nuanced filtering
 
 ### Artist Exploration
 - Use **"More from Artist"** button to explore the current artist's discography
