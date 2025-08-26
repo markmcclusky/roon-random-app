@@ -1,6 +1,6 @@
 /**
  * Main Process Entry Point - Roon Random Album
- * 
+ *
  * This is the main Electron process that creates the application window,
  * initializes the Roon service, and sets up IPC communication between
  * the main and renderer processes.
@@ -25,22 +25,22 @@ const WINDOW_CONFIG = {
   height: 800,
   minWidth: 780,
   minHeight: 560,
-  title: 'Roon Random Album'
+  title: 'Roon Random Album',
 };
 
 // Store configuration with sensible defaults
 const STORE_DEFAULTS = {
-  token: null,              // Roon authentication token
-  lastZoneId: null,         // Last selected output zone
-  filters: { genres: [] }   // Genre filter settings
+  token: null, // Roon authentication token
+  lastZoneId: null, // Last selected output zone
+  filters: { genres: [] }, // Genre filter settings
 };
 
 // Security configuration for renderer process
 const WEB_PREFERENCES = {
   preload: path.join(__dirname, 'preload.cjs'),
-  contextIsolation: true,   // Isolate context for security
-  nodeIntegration: false,   // Disable Node.js in renderer for security
-  sandbox: true             // Enable sandbox for additional security
+  contextIsolation: true, // Isolate context for security
+  nodeIntegration: false, // Disable Node.js in renderer for security
+  sandbox: true, // Enable sandbox for additional security
 };
 
 // ==================== GLOBAL STATE ====================
@@ -48,7 +48,7 @@ const WEB_PREFERENCES = {
 // Persistent storage for application settings
 const store = new Store({
   name: 'config',
-  defaults: STORE_DEFAULTS
+  defaults: STORE_DEFAULTS,
 });
 
 // Main application window reference
@@ -63,7 +63,7 @@ let mainWindow;
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     ...WINDOW_CONFIG,
-    webPreferences: WEB_PREFERENCES
+    webPreferences: WEB_PREFERENCES,
   });
 
   // Load the main UI
@@ -96,14 +96,14 @@ function initializeBackendServices() {
   try {
     // Initialize Roon service with window and store references
     initializeRoonService(mainWindow, store);
-    
+
     // Register all IPC handlers for UI communication
     registerIpcHandlers(store, mainWindow);
-    
+
     console.log('Backend services initialized successfully');
   } catch (error) {
     console.error('Failed to initialize backend services:', error);
-    
+
     // Show error dialog to user
     const { dialog } = require('electron');
     dialog.showErrorBox(
@@ -153,7 +153,7 @@ app.on('activate', () => {
  */
 app.on('before-quit', () => {
   console.log('Application shutting down...');
-  
+
   // Any cleanup code would go here
   // The Roon service will automatically disconnect when the process exits
 });
@@ -164,9 +164,9 @@ app.on('before-quit', () => {
  * Global error handler for uncaught exceptions
  * This prevents the app from crashing on unexpected errors
  */
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   console.error('Uncaught Exception:', error);
-  
+
   // Log the error but don't crash the app unless it's critical
   if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
     console.log('Network error occurred, but continuing...');
@@ -182,7 +182,7 @@ process.on('uncaughtException', (error) => {
  */
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  
+
   // Log the rejection but continue running
   // In production, you might want to report this to an error service
 });
@@ -194,14 +194,14 @@ process.on('unhandledRejection', (reason, promise) => {
  */
 if (process.env.NODE_ENV === 'development') {
   console.log('Running in development mode');
-  
+
   // Enable additional logging in development
   app.on('ready', () => {
     console.log('App ready. Window created:', !!mainWindow);
     console.log('Store path:', store.path);
     console.log('Initial store data:', store.store);
   });
-  
+
   // Hot reload support could be added here if needed
 }
 
@@ -212,6 +212,6 @@ if (process.env.NODE_ENV === 'test') {
   module.exports = {
     createMainWindow,
     initializeBackendServices,
-    store
+    store,
   };
 }

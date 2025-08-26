@@ -37,7 +37,10 @@
     "build:mac-arm": "electron-builder --mac --arm64",
     "build:mac-both": "electron-builder --mac --x64 --arm64",
     "dist": "npm run build",
-    "lint": "echo 'Linting not configured yet'",
+    "lint": "eslint . --ext js,jsx",
+    "lint:fix": "eslint . --ext js,jsx --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "echo 'Tests not configured yet'"
   },
   "engines": {
@@ -58,7 +61,14 @@
     "@electron-forge/maker-dmg": "^7.8.3",
     "@electron-forge/maker-zip": "^7.8.3",
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
-    "electron": "^30.5.1"
+    "@eslint/js": "^9.34.0",
+    "electron": "^30.5.1",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "prettier": "^3.6.2"
   },
   "forge": {
     "packagerConfig": {
@@ -129,17 +139,23 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-	  "target": [
-	    {
-	      "target": "dmg",
-	      "arch": ["arm64", "x64"]
-	    },
-	    {
-	      "target": "zip",
-	      "arch": ["arm64", "x64"]
-	    }
-	  ],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
-   }
   }
+}
