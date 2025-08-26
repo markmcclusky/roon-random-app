@@ -21,12 +21,12 @@ import RoonApiImage from 'node-roon-api-image';
 // ==================== CONSTANTS ====================
 
 const GENRE_CACHE_DURATION = 3600 * 1000; // 1 hour in milliseconds
-const MAX_RANDOM_ATTEMPTS = 50;           // Maximum attempts to find unplayed album
-const BROWSE_PAGE_SIZE = 200;             // Number of items to fetch per browse request
-const DEFAULT_IMAGE_SIZE = 512;           // Default image dimensions
+const MAX_RANDOM_ATTEMPTS = 50; // Maximum attempts to find unplayed album
+const BROWSE_PAGE_SIZE = 200; // Number of items to fetch per browse request
+const DEFAULT_IMAGE_SIZE = 512; // Default image dimensions
 
 // Persisted state (token) storage — lives in a writable, stable location
-const ROON_DATA_DIR = app.getPath('userData');               // e.g. ~/Library/Application Support/Roon Random App
+const ROON_DATA_DIR = app.getPath('userData'); // e.g. ~/Library/Application Support/Roon Random App
 const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
 
 function readConfigFile() {
@@ -50,7 +50,7 @@ const EXTENSION_CONFIG = {
   publisher: 'Mark McClusky',
   email: 'mark@mcclusky.com',
   website: 'https://github.com/markmcclusky/roon-random-app',
-  log_level: 'none'
+  log_level: 'none',
 };
 
 // ==================== STATE VARIABLES ====================
@@ -64,16 +64,15 @@ let transportService = null;
 // Zone and playback state
 let zonesCache = [];
 let zonesRaw = [];
-let lastNowPlayingByZone = Object.create(null);
+const lastNowPlayingByZone = Object.create(null);
 
 // Genre caching
 let genresCache = null;
 let genresCacheTime = null;
 
 // Session management
-let playedThisSession = new Set();
-let artistSessionHistory = new Map();
-let isActionInProgress = false;
+const playedThisSession = new Set();
+const artistSessionHistory = new Map();
 let isDeepDiveInProgress = false;
 
 // IPC communication
@@ -135,10 +134,13 @@ function loadAsync(options) {
  */
 function findItemCaseInsensitive(items, searchText) {
   const searchLower = String(searchText).toLowerCase();
-  return (items || []).find(item => 
-    (item?.title || '').toLowerCase() === searchLower
-  ) || (items || []).find(item => 
-    (item?.title || '').toLowerCase().includes(searchLower)
+  return (
+    (items || []).find(
+      item => (item?.title || '').toLowerCase() === searchLower
+    ) ||
+    (items || []).find(item =>
+      (item?.title || '').toLowerCase().includes(searchLower)
+    )
   );
 }
 
@@ -161,10 +163,10 @@ function createAlbumKey(album, artist) {
  */
 function maybeEmitNowPlaying(zoneId, meta) {
   if (!zoneId || !meta) return;
-  
+
   const key = [meta.song, meta.artist, meta.album].join('||');
   if (lastNowPlayingByZone[zoneId] === key) return;
-  
+
   lastNowPlayingByZone[zoneId] = key;
   emitEvent({ type: 'nowPlaying', meta, zoneId });
 }
@@ -177,22 +179,22 @@ function maybeEmitNowPlaying(zoneId, meta) {
 export function getZoneNowPlaying(zoneId) {
   const zone = (zonesRaw || []).find(z => z.zone_id === zoneId);
   if (!zone) return null;
-  
+
   const nowPlaying = zone.now_playing;
   if (!nowPlaying) return null;
-  
+
   const song = nowPlaying?.three_line?.line1 || null;
   const artist = nowPlaying?.three_line?.line2 || null;
   const album = nowPlaying?.three_line?.line3 || null;
-  
+
   // Only return null if we have absolutely no meaningful data
   if (!song && !artist && !album) return null;
-  
-  return { 
-    song, 
-    artist, 
-    album, 
-    image_key: nowPlaying?.image_key || null 
+
+  return {
+    song,
+    artist,
+    album,
+    image_key: nowPlaying?.image_key || null,
   };
 }
 
@@ -210,18 +212,18 @@ function connectToRoon() {
       const cfg = readConfigFile();
       return cfg.roonstate ? cfg.roonstate : {};
     },
-    set_persisted_state: (state) => {
+    set_persisted_state: state => {
       const all = readConfigFile();
       all.roonstate = state; // { tokens: { [core_id]: token }, paired_core_id: "..." }
       writeConfigFile(all);
     },
 
     core_paired: handleCorePaired,
-    core_unpaired: handleCoreUnpaired
+    core_unpaired: handleCoreUnpaired,
   });
 
   roon.init_services({
-    required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage]
+    required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage],
   });
 
   roon.start_discovery();
@@ -238,11 +240,11 @@ function handleCorePaired(coreInstance) {
 
   // Subscribe to zone changes
   transportService.subscribe_zones(handleZoneUpdates);
-  
-  emitEvent({ 
-    type: 'core', 
-    status: 'paired', 
-    coreDisplayName: core.display_name 
+
+  emitEvent({
+    type: 'core',
+    status: 'paired',
+    coreDisplayName: core.display_name,
   });
 }
 
@@ -251,14 +253,14 @@ function handleCorePaired(coreInstance) {
  */
 function handleCoreUnpaired() {
   emitEvent({ type: 'core', status: 'unpaired' });
-  
+
   // Reset state
   core = null;
   browseService = null;
   transportService = null;
   zonesCache = [];
   zonesRaw = [];
-  
+
   emitZones();
 }
 
@@ -270,7 +272,7 @@ function handleCoreUnpaired() {
 function handleZoneUpdates(response, data) {
   if (response === 'Subscribed') {
     zonesRaw = Array.isArray(data?.zones) ? data.zones : [];
-    
+
     // Add initial now playing fetch after subscription with small delay for UI readiness
     setTimeout(() => {
       const selectedZoneId = store.get('lastZoneId');
@@ -281,7 +283,6 @@ function handleZoneUpdates(response, data) {
         }
       }
     }, 100);
-    
   } else if (response === 'Changed') {
     if (Array.isArray(data?.zones)) {
       zonesRaw = data.zones;
@@ -292,22 +293,22 @@ function handleZoneUpdates(response, data) {
       zonesRaw = Array.from(zonesById.values());
     }
   }
-  
+
   // Update simplified zones cache for UI
   zonesCache = zonesRaw.map(zone => ({
     id: zone.zone_id,
     name: zone.display_name,
     state: zone.state,
-    volume: zone.outputs?.[0]?.volume || null
+    volume: zone.outputs?.[0]?.volume || null,
   }));
-  
+
   // Set default zone if none selected
   if (!store.get('lastZoneId') && zonesCache.length) {
     store.set('lastZoneId', zonesCache[0].id);
   }
-  
+
   emitZones();
-  
+
   // Check for now playing updates (for zone changes after initial subscription)
   if (response === 'Changed') {
     const selectedZoneId = store.get('lastZoneId');
@@ -326,10 +327,10 @@ function handleZoneUpdates(response, data) {
  */
 export async function listGenres() {
   // Return cached data if still fresh
-  if (genresCache && (Date.now() - genresCacheTime < GENRE_CACHE_DURATION)) {
+  if (genresCache && Date.now() - genresCacheTime < GENRE_CACHE_DURATION) {
     return genresCache;
   }
-  
+
   if (!browseService) {
     throw new Error('Not connected to a Roon Core');
   }
@@ -337,28 +338,32 @@ export async function listGenres() {
   try {
     // Navigate to genres section
     await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    const root = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     const genresNode = findItemCaseInsensitive(root.items, 'Genres');
     if (!genresNode?.item_key) {
       throw new Error('Could not locate Genres in this core.');
     }
-    
+
     await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-    
+
     // Load all genres with pagination
     const genres = [];
     let offset = 0;
     const albumCountRegex = /(\d+)\s+Albums?$/;
 
     while (true) {
-      const page = await loadAsync({ 
-        hierarchy: 'browse', 
-        item_key: genresNode.item_key, 
-        offset, 
-        count: BROWSE_PAGE_SIZE 
+      const page = await loadAsync({
+        hierarchy: 'browse',
+        item_key: genresNode.item_key,
+        offset,
+        count: BROWSE_PAGE_SIZE,
       });
-      
+
       const items = page.items || [];
       if (!items.length) break;
 
@@ -366,24 +371,24 @@ export async function listGenres() {
         if (item?.title && item?.subtitle) {
           const match = item.subtitle.match(albumCountRegex);
           const albumCount = match ? parseInt(match[1], 10) : 0;
-          
+
           // Only include genres with albums
           if (albumCount > 0) {
             genres.push({
               title: item.title.trim(),
-              albumCount: albumCount,
+              albumCount,
               expandable: albumCount >= 50, // Mark genres with 50+ albums as expandable
             });
           }
         }
       }
-      
+
       offset += items.length;
     }
 
     // Sort by album count (descending) and remove duplicates
     genres.sort((a, b) => b.albumCount - a.albumCount);
-    
+
     const uniqueGenres = [];
     const seenTitles = new Set();
     for (const genre of genres) {
@@ -396,15 +401,13 @@ export async function listGenres() {
     // Cache the results
     genresCache = uniqueGenres;
     genresCacheTime = Date.now();
-    
+
     return uniqueGenres;
-    
   } catch (error) {
     console.error('Failed to load genres:', error);
     throw error;
   }
 }
-
 
 /**
  * Fetches subgenres for a specific genre
@@ -419,72 +422,85 @@ export async function getSubgenres(genreTitle) {
   try {
     // Navigate to genres section
     await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    const root = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     const genresNode = findItemCaseInsensitive(root.items, 'Genres');
     if (!genresNode?.item_key) {
       throw new Error('Could not locate Genres in this core.');
     }
-    
+
     await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-    
+
     // Find the specific genre
     let genreItem = null;
     let offset = 0;
     const targetGenreLower = genreTitle.toLowerCase();
-    
+
     while (!genreItem) {
-      const page = await loadAsync({ 
-        hierarchy: 'browse', 
-        item_key: genresNode.item_key, 
-        offset, 
-        count: BROWSE_PAGE_SIZE 
+      const page = await loadAsync({
+        hierarchy: 'browse',
+        item_key: genresNode.item_key,
+        offset,
+        count: BROWSE_PAGE_SIZE,
       });
-      
+
       const items = page.items || [];
       if (!items.length) break;
-      
-      genreItem = items.find(item => 
-        (item.title || '').trim().toLowerCase() === targetGenreLower
+
+      genreItem = items.find(
+        item => (item.title || '').trim().toLowerCase() === targetGenreLower
       );
-      
+
       offset += items.length;
     }
-    
+
     if (!genreItem?.item_key) {
       throw new Error(`Genre '${genreTitle}' not found.`);
     }
-    
+
     // Browse into the genre to get subgenres
     await browseAsync({ hierarchy: 'browse', item_key: genreItem.item_key });
-    const genrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    const genrePage = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     const subGenres = [];
     const items = genrePage.items || [];
-    
+
     for (const item of items) {
-      if (item.hint === 'list' && item.subtitle && item.subtitle.includes('Albums')) {
+      if (
+        item.hint === 'list' &&
+        item.subtitle &&
+        item.subtitle.includes('Albums')
+      ) {
         // Extract album count
         const albumCountMatch = item.subtitle.match(/(\d+)\s+Albums?/);
-        const albumCount = albumCountMatch ? parseInt(albumCountMatch[1], 10) : 0;
-        
+        const albumCount = albumCountMatch
+          ? parseInt(albumCountMatch[1], 10)
+          : 0;
+
         // Only include subgenres with 10+ albums
         if (albumCount >= 10) {
           subGenres.push({
             title: item.title,
-            albumCount: albumCount,
+            albumCount,
             parentGenre: genreTitle,
-            item_key: item.item_key // Store for later navigation
+            item_key: item.item_key, // Store for later navigation
           });
         }
       }
     }
-    
+
     // Sort by album count descending
     subGenres.sort((a, b) => b.albumCount - a.albumCount);
-    
+
     return subGenres;
-    
   } catch (error) {
     console.error(`Failed to get subgenres for ${genreTitle}:`, error);
     throw error;
@@ -502,23 +518,23 @@ export async function pickRandomAlbumAndPlay(genreFilters = []) {
   if (!browseService || !transportService) {
     throw new Error('Not connected to a Roon Core.');
   }
-  
+
   // Ensure we have a valid output zone
   const zoneId = await ensureValidZone();
-  
+
   // Navigate to the appropriate album list
   const targetKey = await navigateToAlbumList(genreFilters);
-  
+
   // Pick a random album
   const selectedAlbum = await selectRandomAlbum(targetKey);
-  
+
   // Play the selected album
   await playAlbum(selectedAlbum, zoneId);
-  
+
   return {
     album: selectedAlbum.title,
     artist: selectedAlbum.subtitle,
-    image_key: selectedAlbum.image_key
+    image_key: selectedAlbum.image_key,
   };
 }
 
@@ -528,18 +544,18 @@ export async function pickRandomAlbumAndPlay(genreFilters = []) {
  */
 async function ensureValidZone() {
   let zoneId = store.get('lastZoneId');
-  
+
   if (!zoneId || !zonesCache.some(z => z.id === zoneId)) {
     zoneId = zonesCache[0]?.id || null;
     if (zoneId) {
       store.set('lastZoneId', zoneId);
     }
   }
-  
+
   if (!zoneId) {
     throw new Error('No output zones available.');
   }
-  
+
   return zoneId;
 }
 
@@ -551,7 +567,7 @@ async function ensureValidZone() {
 async function navigateToAlbumList(genreFilters) {
   await browseAsync({ hierarchy: 'browse', pop_all: true });
   const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  
+
   if (Array.isArray(genreFilters) && genreFilters.length > 0) {
     return await navigateToGenreAlbums(root, genreFilters);
   } else {
@@ -567,12 +583,15 @@ async function navigateToAlbumList(genreFilters) {
  */
 async function navigateToGenreAlbums(root, genreFilters) {
   // Weighted random selection based on album counts
-  const totalAlbums = genreFilters.reduce((sum, genre) => sum + genre.albumCount, 0);
+  const totalAlbums = genreFilters.reduce(
+    (sum, genre) => sum + genre.albumCount,
+    0
+  );
   const randomValue = Math.random() * totalAlbums;
-  
+
   let cumulativeWeight = 0;
   let targetGenre = genreFilters[0]; // fallback
-  
+
   for (const genre of genreFilters) {
     cumulativeWeight += genre.albumCount;
     if (randomValue <= cumulativeWeight) {
@@ -580,7 +599,7 @@ async function navigateToGenreAlbums(root, genreFilters) {
       break;
     }
   }
-  
+
   // If this is a subgenre, navigate to it dynamically
   if (targetGenre.isSubgenre && targetGenre.parentGenre) {
     // Navigate to the parent genre first
@@ -588,62 +607,77 @@ async function navigateToGenreAlbums(root, genreFilters) {
     if (!genresNode?.item_key) {
       throw new Error('Could not locate Genres in this core.');
     }
-    
+
     await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-    
+
     // Find the parent genre
     const parentGenreLower = targetGenre.parentGenre.toLowerCase();
     let parentGenreItem = null;
     let offset = 0;
-    
+
     while (!parentGenreItem) {
-      const page = await loadAsync({ 
-        hierarchy: 'browse', 
-        item_key: genresNode.item_key, 
-        offset, 
-        count: BROWSE_PAGE_SIZE 
+      const page = await loadAsync({
+        hierarchy: 'browse',
+        item_key: genresNode.item_key,
+        offset,
+        count: BROWSE_PAGE_SIZE,
       });
-      
+
       const items = page.items || [];
       if (!items.length) break;
-      
-      parentGenreItem = items.find(item => 
-        (item.title || '').trim().toLowerCase() === parentGenreLower
+
+      parentGenreItem = items.find(
+        item => (item.title || '').trim().toLowerCase() === parentGenreLower
       );
-      
+
       offset += items.length;
     }
-    
+
     if (!parentGenreItem?.item_key) {
       throw new Error(`Parent genre '${targetGenre.parentGenre}' not found.`);
     }
-    
+
     // Browse into the parent genre
-    await browseAsync({ hierarchy: 'browse', item_key: parentGenreItem.item_key });
-    const parentPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    await browseAsync({
+      hierarchy: 'browse',
+      item_key: parentGenreItem.item_key,
+    });
+    const parentPage = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     // Find the subgenre
     const subgenreTitle = targetGenre.title.toLowerCase();
-    const subgenreItem = (parentPage.items || []).find(item => 
-      (item.title || '').toLowerCase() === subgenreTitle &&
-      item.hint === 'list' && 
-      item.subtitle && 
-      item.subtitle.includes('Albums')
+    const subgenreItem = (parentPage.items || []).find(
+      item =>
+        (item.title || '').toLowerCase() === subgenreTitle &&
+        item.hint === 'list' &&
+        item.subtitle &&
+        item.subtitle.includes('Albums')
     );
-    
+
     if (!subgenreItem?.item_key) {
-      throw new Error(`Subgenre '${targetGenre.title}' not found in '${targetGenre.parentGenre}'.`);
+      throw new Error(
+        `Subgenre '${targetGenre.title}' not found in '${targetGenre.parentGenre}'.`
+      );
     }
-    
+
     // Browse into the subgenre
     await browseAsync({ hierarchy: 'browse', item_key: subgenreItem.item_key });
-    const subgenrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    const subgenrePage = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     // Look for Albums section within the subgenre
-    const albumsNode = findItemCaseInsensitive(subgenrePage.items, 'Albums') ||
-                      findItemCaseInsensitive(subgenrePage.items, 'All Albums') ||
-                      findItemCaseInsensitive(subgenrePage.items, 'Library Albums');
-    
+    const albumsNode =
+      findItemCaseInsensitive(subgenrePage.items, 'Albums') ||
+      findItemCaseInsensitive(subgenrePage.items, 'All Albums') ||
+      findItemCaseInsensitive(subgenrePage.items, 'Library Albums');
+
     if (albumsNode?.item_key) {
       await browseAsync({ hierarchy: 'browse', item_key: albumsNode.item_key });
       return albumsNode.item_key;
@@ -651,52 +685,59 @@ async function navigateToGenreAlbums(root, genreFilters) {
       return subgenreItem.item_key;
     }
   }
-  
+
   // Handle top-level genres (existing logic)
   const genresNode = findItemCaseInsensitive(root.items, 'Genres');
   if (!genresNode?.item_key) {
     throw new Error('Could not locate Genres in this core.');
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-  
+
   const targetGenreLower = targetGenre.title.toLowerCase();
-  
+
   let genreItem = null;
   let offset = 0;
-  
+
   while (!genreItem) {
-    const page = await loadAsync({ 
-      hierarchy: 'browse', 
-      item_key: genresNode.item_key, 
-      offset, 
-      count: BROWSE_PAGE_SIZE 
+    const page = await loadAsync({
+      hierarchy: 'browse',
+      item_key: genresNode.item_key,
+      offset,
+      count: BROWSE_PAGE_SIZE,
     });
-    
+
     const items = page.items || [];
     if (!items.length) break;
-    
-    genreItem = items.find(item => 
-      (item.title || '').trim().toLowerCase() === targetGenreLower
-    ) || items.find(item => 
-      (item.title || '').toLowerCase().includes(targetGenreLower)
-    );
-    
+
+    genreItem =
+      items.find(
+        item => (item.title || '').trim().toLowerCase() === targetGenreLower
+      ) ||
+      items.find(item =>
+        (item.title || '').toLowerCase().includes(targetGenreLower)
+      );
+
     offset += items.length;
   }
-  
+
   if (!genreItem?.item_key) {
     throw new Error(`Genre '${targetGenre.title}' not found.`);
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: genreItem.item_key });
-  const genrePage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  
+  const genrePage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+
   // Look for Albums section within the genre
-  const albumsNode = findItemCaseInsensitive(genrePage.items, 'Albums') ||
-                    findItemCaseInsensitive(genrePage.items, 'All Albums') ||
-                    findItemCaseInsensitive(genrePage.items, 'Library Albums');
-  
+  const albumsNode =
+    findItemCaseInsensitive(genrePage.items, 'Albums') ||
+    findItemCaseInsensitive(genrePage.items, 'All Albums') ||
+    findItemCaseInsensitive(genrePage.items, 'Library Albums');
+
   if (albumsNode?.item_key) {
     await browseAsync({ hierarchy: 'browse', item_key: albumsNode.item_key });
     return albumsNode.item_key;
@@ -715,15 +756,19 @@ async function navigateToLibraryAlbums(root) {
   if (!library?.item_key) {
     throw new Error("No 'Library' found at root");
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: library.item_key });
-  const libraryPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  
+  const libraryPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+
   const albums = findItemCaseInsensitive(libraryPage.items, 'Albums');
   if (!albums?.item_key) {
     throw new Error("No 'Albums' found under Library");
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: albums.item_key });
   return albums.item_key;
 }
@@ -736,24 +781,25 @@ async function navigateToLibraryAlbums(root) {
 async function selectRandomAlbum(targetKey) {
   const header = await browseAsync({ hierarchy: 'browse' });
   const totalAlbums = header?.list?.count ?? 0;
-  
+
   if (totalAlbums === 0) {
     throw new Error('Album list is empty.');
   }
-  
+
   let selectedAlbum = null;
-  const maxAttempts = Math.min(totalAlbums, MAX_RANDOM_ATTEMPTS) + playedThisSession.size;
-  
+  const maxAttempts =
+    Math.min(totalAlbums, MAX_RANDOM_ATTEMPTS) + playedThisSession.size;
+
   // Try to find an unplayed album
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const randomIndex = Math.floor(Math.random() * totalAlbums);
-    const albumPage = await loadAsync({ 
-      hierarchy: 'browse', 
-      item_key: targetKey, 
-      offset: randomIndex, 
-      count: 1 
+    const albumPage = await loadAsync({
+      hierarchy: 'browse',
+      item_key: targetKey,
+      offset: randomIndex,
+      count: 1,
     });
-    
+
     const candidate = albumPage.items?.[0];
     if (candidate) {
       const albumKey = createAlbumKey(candidate.title, candidate.subtitle);
@@ -763,29 +809,29 @@ async function selectRandomAlbum(targetKey) {
       }
     }
   }
-  
+
   // If no unplayed album found, clear history and try once more
   if (!selectedAlbum) {
     playedThisSession.clear();
-    
+
     const randomIndex = Math.floor(Math.random() * totalAlbums);
-    const albumPage = await loadAsync({ 
-      hierarchy: 'browse', 
-      item_key: targetKey, 
-      offset: randomIndex, 
-      count: 1 
+    const albumPage = await loadAsync({
+      hierarchy: 'browse',
+      item_key: targetKey,
+      offset: randomIndex,
+      count: 1,
     });
-    
+
     selectedAlbum = albumPage.items?.[0];
     if (!selectedAlbum) {
       throw new Error('Could not find an album after resetting session.');
     }
   }
-  
+
   // Mark as played
   const albumKey = createAlbumKey(selectedAlbum.title, selectedAlbum.subtitle);
   playedThisSession.add(albumKey);
-  
+
   return selectedAlbum;
 }
 
@@ -796,8 +842,12 @@ async function selectRandomAlbum(targetKey) {
  */
 async function playAlbum(album, zoneId) {
   await browseAsync({ hierarchy: 'browse', item_key: album.item_key });
-  const albumPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 200 });
-  
+  const albumPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 200,
+  });
+
   // Try to get album art
   let artKey = album?.image_key || albumPage?.list?.image_key || null;
   if (!artKey) {
@@ -805,32 +855,37 @@ async function playAlbum(album, zoneId) {
     if (itemWithArt) artKey = itemWithArt.image_key;
   }
   if (artKey && !album.image_key) album.image_key = artKey;
-  
+
   // Look for "Play Album" action
-  const playAlbumAction = (albumPage.items || []).find(item => 
-    item.title === 'Play Album' && item.hint === 'action_list'
+  const playAlbumAction = (albumPage.items || []).find(
+    item => item.title === 'Play Album' && item.hint === 'action_list'
   );
-  
+
   if (playAlbumAction?.item_key) {
-    await browseAsync({ 
-      hierarchy: 'browse', 
-      item_key: playAlbumAction.item_key, 
-      zone_or_output_id: zoneId 
+    await browseAsync({
+      hierarchy: 'browse',
+      item_key: playAlbumAction.item_key,
+      zone_or_output_id: zoneId,
     });
-    
-    const actions = await loadAsync({ hierarchy: 'browse', offset: 0, count: 20 });
-    const playNowAction = (actions.items || []).find(item => 
-      /play\s*now/i.test(item.title || '')
-    ) || (actions.items || [])[0];
-    
+
+    const actions = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 20,
+    });
+    const playNowAction =
+      (actions.items || []).find(item =>
+        /play\s*now/i.test(item.title || '')
+      ) || (actions.items || [])[0];
+
     if (!playNowAction?.item_key) {
       throw new Error('No playable action found');
     }
-    
-    await browseAsync({ 
-      hierarchy: 'browse', 
-      item_key: playNowAction.item_key, 
-      zone_or_output_id: zoneId 
+
+    await browseAsync({
+      hierarchy: 'browse',
+      item_key: playNowAction.item_key,
+      zone_or_output_id: zoneId,
     });
   } else {
     // Fallback to play_from_here
@@ -857,26 +912,30 @@ export async function playAlbumByName(albumName, artistName) {
   }
 
   const zoneId = await ensureValidZone();
-  
+
   // Navigate to main albums list
   await browseAsync({ hierarchy: 'browse', pop_all: true });
   const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  
+
   const library = findItemCaseInsensitive(root.items, 'Library');
   if (!library?.item_key) {
     throw new Error("Could not find 'Library' in Roon's root.");
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: library.item_key });
-  const libraryPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-  
+  const libraryPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+
   const albums = findItemCaseInsensitive(libraryPage.items, 'Albums');
   if (!albums?.item_key) {
     throw new Error("Could not find 'Albums' in the Library.");
   }
-  
+
   await browseAsync({ hierarchy: 'browse', item_key: albums.item_key });
-  
+
   // Search for the specific album
   const albumNameLower = albumName.toLowerCase();
   const artistNameLower = artistName.toLowerCase();
@@ -884,31 +943,34 @@ export async function playAlbumByName(albumName, artistName) {
   let offset = 0;
 
   while (!albumItem) {
-    const page = await loadAsync({ 
-      hierarchy: 'browse', 
-      item_key: albums.item_key, 
-      offset, 
-      count: BROWSE_PAGE_SIZE 
+    const page = await loadAsync({
+      hierarchy: 'browse',
+      item_key: albums.item_key,
+      offset,
+      count: BROWSE_PAGE_SIZE,
     });
-    
+
     const items = page.items || [];
     if (!items.length) break;
-    
-    albumItem = items.find(item => 
-      (item.title || '').toLowerCase() === albumNameLower && 
-      (item.subtitle || '').toLowerCase() === artistNameLower
+
+    albumItem = items.find(
+      item =>
+        (item.title || '').toLowerCase() === albumNameLower &&
+        (item.subtitle || '').toLowerCase() === artistNameLower
     );
-    
+
     offset += items.length;
   }
-  
+
   if (!albumItem?.item_key) {
-    throw new Error(`Album '${albumName}' by '${artistName}' not found in the library.`);
+    throw new Error(
+      `Album '${albumName}' by '${artistName}' not found in the library.`
+    );
   }
 
   // Play the found album
   await playAlbum(albumItem, zoneId);
-  
+
   return { success: true };
 }
 
@@ -922,104 +984,118 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
   if (isDeepDiveInProgress) {
     return { ignored: true };
   }
-  
+
   isDeepDiveInProgress = true;
-  
+
   try {
     if (!browseService || !transportService) {
       throw new Error('Not connected to a Roon Core.');
     }
 
     const zoneId = await ensureValidZone();
-    
+
     // Initialize session tracking for this artist if needed
     if (!artistSessionHistory.has(artistName)) {
       artistSessionHistory.set(artistName, new Set());
     }
-	const playedByArtist = artistSessionHistory.get(artistName);
+    const playedByArtist = artistSessionHistory.get(artistName);
 
-	// Always exclude the current album from being picked again this session
-	// (This represents the album we're trying to get away from)
-	playedByArtist.add(currentAlbumName);
-    
+    // Always exclude the current album from being picked again this session
+    // (This represents the album we're trying to get away from)
+    playedByArtist.add(currentAlbumName);
+
     // Navigate to artists list
     await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
+    const root = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
     const library = findItemCaseInsensitive(root.items, 'Library');
     await browseAsync({ hierarchy: 'browse', item_key: library.item_key });
-    
-    const libraryPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+
+    const libraryPage = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
     const artists = findItemCaseInsensitive(libraryPage.items, 'Artists');
     await browseAsync({ hierarchy: 'browse', item_key: artists.item_key });
-    
+
     // Find the specific artist
     let artistItem = null;
     let offset = 0;
     const artistNameLower = artistName.toLowerCase();
-    
+
     while (!artistItem) {
-      const page = await loadAsync({ 
-        hierarchy: 'browse', 
-        item_key: artists.item_key, 
-        offset, 
-        count: BROWSE_PAGE_SIZE 
+      const page = await loadAsync({
+        hierarchy: 'browse',
+        item_key: artists.item_key,
+        offset,
+        count: BROWSE_PAGE_SIZE,
       });
-      
+
       if (!page.items || page.items.length === 0) break;
-      
-      artistItem = page.items.find(item => 
-        (item.title || '').toLowerCase() === artistNameLower
+
+      artistItem = page.items.find(
+        item => (item.title || '').toLowerCase() === artistNameLower
       );
-      
+
       offset += page.items.length;
     }
-    
+
     if (!artistItem?.item_key) {
       throw new Error(`Artist '${artistName}' not found.`);
     }
-    
+
     // Get artist's albums
     await browseAsync({ hierarchy: 'browse', item_key: artistItem.item_key });
-    const artistPage = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
-    
-    const allAlbums = (artistPage.items || []).filter(item => 
-      item.hint === 'list' && item.subtitle === artistName
+    const artistPage = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 500,
+    });
+
+    const allAlbums = (artistPage.items || []).filter(
+      item => item.hint === 'list' && item.subtitle === artistName
     );
-    
-	// Filter out albums we've played this session (including the starting album)
-	let availableAlbums = allAlbums.filter(album => 
-	  !playedByArtist.has(album.title)
-	);
-    
+
+    // Filter out albums we've played this session (including the starting album)
+    let availableAlbums = allAlbums.filter(
+      album => !playedByArtist.has(album.title)
+    );
+
     // If no unplayed albums available, clear this artist's history and try again
     if (availableAlbums.length === 0) {
       playedByArtist.clear();
-      
+
       // Try again with cleared history
-      availableAlbums = allAlbums.filter(album => 
-        album.title !== currentAlbumName
+      availableAlbums = allAlbums.filter(
+        album => album.title !== currentAlbumName
       );
-      
+
       if (availableAlbums.length === 0) {
-        throw new Error(`Not enough albums to pick a new one for '${artistName}'.`);
+        throw new Error(
+          `Not enough albums to pick a new one for '${artistName}'.`
+        );
       }
     }
-    
+
     // Pick and play random album
-    const selectedAlbum = availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
-    
+    const selectedAlbum =
+      availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
+
     // Mark this album as played for this artist
     playedByArtist.add(selectedAlbum.title);
-    
-    await playAlbum(selectedAlbum, zoneId);
-    
-    return { 
-      album: selectedAlbum.title, 
-      artist: selectedAlbum.subtitle, 
-      image_key: selectedAlbum.image_key 
-    };
 
+    await playAlbum(selectedAlbum, zoneId);
+
+    return {
+      album: selectedAlbum.title,
+      artist: selectedAlbum.subtitle,
+      image_key: selectedAlbum.image_key,
+    };
   } finally {
     isDeepDiveInProgress = false;
   }
@@ -1034,25 +1110,29 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
  * @returns {Promise<string|null>} Data URL or null
  */
 export function getImageDataUrl(imageKey, options = {}) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (!core || !imageKey) return resolve(null);
-    
+
     const imageService = core.services.RoonApiImage;
     if (!imageService) return resolve(null);
-    
+
     const imageOptions = {
       scale: options.scale || 'fit',
       width: options.width || DEFAULT_IMAGE_SIZE,
       height: options.height || DEFAULT_IMAGE_SIZE,
-      format: options.format || 'image/jpeg'
+      format: options.format || 'image/jpeg',
     };
-    
-    imageService.get_image(imageKey, imageOptions, (error, contentType, body) => {
-      if (error || !body) return resolve(null);
-      
-      const base64 = Buffer.from(body).toString('base64');
-      resolve(`data:${contentType};base64,${base64}`);
-    });
+
+    imageService.get_image(
+      imageKey,
+      imageOptions,
+      (error, contentType, body) => {
+        if (error || !body) return resolve(null);
+
+        const base64 = Buffer.from(body).toString('base64');
+        resolve(`data:${contentType};base64,${base64}`);
+      }
+    );
   });
 }
 
@@ -1073,8 +1153,8 @@ export function clearSessionHistory() {
  * Gets current filter settings from store
  * @returns {Object} Filter settings
  */
-export function getFilters() { 
-  return store.get('filters'); 
+export function getFilters() {
+  return store.get('filters');
 }
 
 /**
@@ -1085,21 +1165,22 @@ export function getFilters() {
 export function setFilters(filters) {
   const current = getFilters();
   let nextGenres;
-  
+
   if (Array.isArray(filters?.genres)) {
-    nextGenres = filters.genres
-      .map(s => String(s).trim())
-      .filter(Boolean);
-  } else if (filters && Object.prototype.hasOwnProperty.call(filters, 'genres')) {
+    nextGenres = filters.genres.map(s => String(s).trim()).filter(Boolean);
+  } else if (
+    filters &&
+    Object.prototype.hasOwnProperty.call(filters, 'genres')
+  ) {
     nextGenres = [];
   } else {
     nextGenres = Array.isArray(current?.genres) ? current.genres : [];
   }
-  
+
   const updatedFilters = { genres: nextGenres };
   store.set('filters', updatedFilters);
   emitEvent({ type: 'filters', filters: updatedFilters });
-  
+
   return updatedFilters;
 }
 
@@ -1107,8 +1188,8 @@ export function setFilters(filters) {
  * Sets the last selected zone ID
  * @param {string|null} zoneId - Zone ID to store
  */
-export function setLastZone(zoneId) { 
-  store.set('lastZoneId', zoneId || null); 
+export function setLastZone(zoneId) {
+  store.set('lastZoneId', zoneId || null);
 }
 
 // ==================== PUBLIC API GETTERS ====================
@@ -1117,32 +1198,32 @@ export function setLastZone(zoneId) {
  * Gets the current Roon core instance
  * @returns {Object|null} Core instance or null
  */
-export function getCore() { 
-  return core; 
+export function getCore() {
+  return core;
 }
 
 /**
  * Gets the transport service instance
  * @returns {Object|null} Transport service or null
  */
-export function getTransport() { 
-  return transportService; 
+export function getTransport() {
+  return transportService;
 }
 
 /**
  * Gets the cached zones list for UI
  * @returns {Array} Simplified zones array
  */
-export function getZonesCache() { 
-  return zonesCache; 
+export function getZonesCache() {
+  return zonesCache;
 }
 
 /**
  * Gets the raw zones data from Roon
  * @returns {Array} Raw zones array
  */
-export function getRawZones() { 
-  return zonesRaw; 
+export function getRawZones() {
+  return zonesRaw;
 }
 
 // ==================== INITIALIZATION ====================

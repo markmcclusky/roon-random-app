@@ -1,467 +1,491 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  
-  <!-- Security: Content Security Policy for Electron app -->
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; 
+  <head>
+    <meta charset="utf-8" />
+
+    <!-- Security: Content Security Policy for Electron app -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; 
                  script-src 'self' https://unpkg.com; 
                  style-src 'self' 'unsafe-inline'; 
                  img-src 'self' data:; 
-                 connect-src 'self';" />
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Roon Random Album</title>
-  
-  <style>
-    /* ==================== CSS CUSTOM PROPERTIES ==================== */
-    
-    :root {
-      /* Light theme colors */
-      --bg: #f6f7fb;
-      --card: #fff;
-      --fg: #0f172a;
-      --muted: #64748b;
-      --border: #e5e7eb;
-      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-      --primary: #2563eb;
-      --primary-ink: #fff;
-      --ring: #93c5fd;
-    }
-    
-    /* Dark theme colors (auto-applied based on system preference) */
-    @media (prefers-color-scheme: dark) {
+                 connect-src 'self';"
+    />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roon Random Album</title>
+
+    <style>
+      /* ==================== CSS CUSTOM PROPERTIES ==================== */
+
       :root {
-        --bg: #0f1115;
-        --card: #11131a;
-        --fg: #e7eaf0;
-        --muted: #94a3b8;
-        --border: #232634;
-        --shadow: 0 10px 30px rgba(0, 0, 0, .35);
-        --primary: #60a5fa;
-        --primary-ink: #0b1220;
-        --ring: #1d4ed8;
+        /* Light theme colors */
+        --bg: #f6f7fb;
+        --card: #fff;
+        --fg: #0f172a;
+        --muted: #64748b;
+        --border: #e5e7eb;
+        --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        --primary: #2563eb;
+        --primary-ink: #fff;
+        --ring: #93c5fd;
       }
-    }
 
-    /* ==================== GLOBAL LAYOUT ==================== */
-    
-    html, body {
-      height: 100%;
-      margin: 0;
-      overflow: hidden; /* Prevents whole window scrolling */
-    }
-    
-    body {
-      background: var(--bg);
-      color: var(--fg);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-    
-    #root {
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-    }
-
-    /* ==================== MAIN LAYOUT COMPONENTS ==================== */
-    
-    .wrap {
-      max-width: 1400px;
-      margin: 28px auto 40px;
-      padding: 0 20px;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    /* Top toolbar with connection status and controls */
-    .toolbar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: linear-gradient(180deg, rgba(99, 102, 241, .08), transparent 70%);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 10px 12px;
-      box-shadow: var(--shadow);
-      flex-shrink: 0; /* Prevent toolbar from shrinking */
-    }
-
-    /* Three-column main content grid */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      padding: 20px;
-      flex-grow: 1;
-      min-height: 0; /* Allows grid items to shrink */
-    }
-
-    /* ==================== TOOLBAR COMPONENTS ==================== */
-    
-    .seg {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    
-    .spacer {
-      flex: 1;
-    }
-    
-    .divider {
-      width: 1px;
-      height: 24px;
-      background: var(--border);
-    }
-
-    /* Connection status indicators */
-    .status-yes {
-      color: #22c55e; /* Vibrant green for connected */
-    }
-    
-    .status-no {
-      color: #ef4444; /* Clear red for disconnected */
-    }
-
-    /* ==================== FORM CONTROLS ==================== */
-    
-    select, .btn {
-      height: 34px;
-      border-radius: 9px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--fg);
-      padding: 0 10px;
-      outline: none;
-    }
-    
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      transition: opacity 0.15s ease-in-out;
-    }
-    
-    .btn-primary {
-      background: var(--primary);
-      color: var(--primary-ink);
-      border-color: var(--primary);
-    }
-    
-    .btn-primary:not(:disabled):hover {
-      opacity: 0.7;
-    }
-    
-    .btn:disabled {
-      opacity: .6;
-      cursor: not-allowed;
-    }
-    
-    .btn:focus-visible {
-      box-shadow: 0 0 0 3px var(--ring);
-    }
-
-    /* Link-style buttons */
-    .btn-link {
-      background: none;
-      border: none;
-      color: #007aff; /* Standard blue link color */
-      cursor: pointer;
-      padding: 0;
-      font-size: 11px;
-      text-decoration: underline;
-    }
-
-    .btn-link:disabled {
-      color: #8e8e93;
-      text-decoration: none;
-      cursor: not-allowed;
-    }
-
-    /* ==================== CARD COMPONENTS ==================== */
-    
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      box-shadow: var(--shadow);
-      display: flex;
-      flex-direction: column;
-      min-height: 0; /* Allows card content to scroll */
-    }
-
-    /* Cards that need scrollable content */
-    .activity-card {
-      overflow: hidden;
-    }
-
-    /* ==================== TYPOGRAPHY ==================== */
-    
-    h1 {
-      font-size: 18px;
-      margin: 0 0 12px;
-    }
-    
-    h2 {
-      font-size: 16px;
-      margin: 0 0 10px;
-    }
-    
-    .muted {
-      color: var(--muted);
-    }
-    
-    .title {
-      font-weight: 600;
-    }
-    
-    .time {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    /* ==================== NOW PLAYING COMPONENTS ==================== */
-    
-    .np {
-      display: flex;
-      gap: 20px;
-      align-items: flex-start;
-    }
-    
-    .np-left {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex-shrink: 0;
-    }
-    
-    .np-details {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      flex-grow: 1;
-      gap: 8px; /* Spacing between track info and controls */
-    }
-    
-    .cover {
-      width: 256px;
-      height: 256px;
-      object-fit: cover;
-      box-shadow: var(--shadow);
-      background: var(--border); /* Fallback when no image */
-    }
-
-    /* ==================== TRANSPORT CONTROLS ==================== */
-    
-	.controls-row {
-	  display: grid;
-	  grid-template-columns: auto 1fr;
-	  align-items: center;
-	  gap: 24px;
-	  min-height: 40px;
-	}
-
-	.transport-controls {
-	  display: flex;
-	  align-items: center;
-	  gap: 12px;
-	  justify-self: start; /* Keep transport controls left-aligned */
-	}
-
-	.volume-area {
-	  justify-self: stretch; /* Volume area takes remaining space */
-	  min-width: 140px; /* Force minimum width even when empty */
-	  min-height: 24px; /* Force minimum height */
-	}
-    
-    .btn-icon {
-      appearance: none;
-      background: none;
-      border: none;
-      padding: 0;
-      cursor: pointer;
-      line-height: 0;
-    }
-    
-    .btn-icon img {
-      width: 36px;
-      height: 36px;
-      object-fit: contain;
-      transition: opacity 0.15s ease-in-out;
-    }
-    
-    .btn-icon:hover img {
-      opacity: 0.5;
-    }
-    
-    .btn-icon:disabled {
-      cursor: not-allowed;
-    }
-    
-    .btn-icon:disabled img {
-      opacity: 0.4;
-    }
-
-	.volume-placeholder {
-	  flex-grow: 1;
-	  height: 24px; /* Same height as volume slider */
-	  visibility: hidden; /* Takes up space but invisible */
-	}
-    
-    .volume-slider {
-      flex-grow: 1;
-      transform: translateY(2px); /* Visual alignment with transport buttons */
-    }
-
-    /* ==================== GENRE FILTER COMPONENTS ==================== */
-    
-    .genre-card-content {
-      flex-grow: 1;
-      overflow-y: auto;
-      min-height: 0;
-      padding-right: 10px; /* Space for scrollbar */
-    }
-    
-    .toggle-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px; /* Compact spacing */
-    }
-    
-    .toggle-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      user-select: none;
-      padding: 4px 0; /* Easier click targets */
-    }
-    
-    .toggle-item[data-disabled="true"] {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    .toggle-switch {
-      position: relative;
-      display: inline-block;
-      width: 44px;
-      height: 24px;
-      background-color: #ccc;
-      border-radius: 34px;
-      transition: background-color 0.2s;
-      flex-shrink: 0;
-    }
-    
-    .toggle-switch::before {
-      content: "";
-      position: absolute;
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      border-radius: 50%;
-      transition: transform 0.2s;
-    }
-    
-    .toggle-item[data-active="true"] .toggle-switch {
-      background-color: var(--primary);
-    }
-    
-    .toggle-item[data-active="true"] .toggle-switch::before {
-      transform: translateX(20px);
-    }
-
-    /* ==================== ACTIVITY FEED COMPONENTS ==================== */
-    
-    .activity {
-      flex-grow: 1;
-      overflow-y: auto;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    
-    .row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    
-    .item {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      padding: 8px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      width: 100%;
-    }
-    
-    button.item {
-      background: transparent;
-      transition: background-color 0.15s ease-in-out;
-      cursor: pointer;
-    }
-    
-    button.item:hover {
-      background: var(--border);
-    }
-    
-    .thumb {
-      width: 48px;
-      height: 48px;
-      object-fit: cover;
-      background: var(--border);
-      flex-shrink: 0;
-    }
-
-    /* ==================== LOADING ANIMATIONS ==================== */
-    
-    .spinner {
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid rgba(255, 255, 255, .55);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-    }
-    
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
+      /* Dark theme colors (auto-applied based on system preference) */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1115;
+          --card: #11131a;
+          --fg: #e7eaf0;
+          --muted: #94a3b8;
+          --border: #232634;
+          --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+          --primary: #60a5fa;
+          --primary-ink: #0b1220;
+          --ring: #1d4ed8;
+        }
       }
-    }
 
-    /* ==================== UTILITY CLASSES ==================== */
-    
-    .list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-  </style>
-</head>
+      /* ==================== GLOBAL LAYOUT ==================== */
 
-<body>
-  <!-- Main React application mount point -->
-  <div id="root"></div>
-  
-  <!-- External React dependencies from CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  
-  <!-- Main application JavaScript -->
-  <script src="./index.js"></script>
-</body>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden; /* Prevents whole window scrolling */
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          14px/1.45 -apple-system,
+          BlinkMacSystemFont,
+          'Inter',
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+
+      #root {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      /* ==================== MAIN LAYOUT COMPONENTS ==================== */
+
+      .wrap {
+        max-width: 1400px;
+        margin: 28px auto 40px;
+        padding: 0 20px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      /* Top toolbar with connection status and controls */
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: linear-gradient(
+          180deg,
+          rgba(99, 102, 241, 0.08),
+          transparent 70%
+        );
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 10px 12px;
+        box-shadow: var(--shadow);
+        flex-shrink: 0; /* Prevent toolbar from shrinking */
+      }
+
+      /* Three-column main content grid */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 20px;
+        flex-grow: 1;
+        min-height: 0; /* Allows grid items to shrink */
+      }
+
+      /* ==================== TOOLBAR COMPONENTS ==================== */
+
+      .seg {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .divider {
+        width: 1px;
+        height: 24px;
+        background: var(--border);
+      }
+
+      /* Connection status indicators */
+      .status-yes {
+        color: #22c55e; /* Vibrant green for connected */
+      }
+
+      .status-no {
+        color: #ef4444; /* Clear red for disconnected */
+      }
+
+      /* ==================== FORM CONTROLS ==================== */
+
+      select,
+      .btn {
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg);
+        padding: 0 10px;
+        outline: none;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: opacity 0.15s ease-in-out;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-ink);
+        border-color: var(--primary);
+      }
+
+      .btn-primary:not(:disabled):hover {
+        opacity: 0.7;
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .btn:focus-visible {
+        box-shadow: 0 0 0 3px var(--ring);
+      }
+
+      /* Link-style buttons */
+      .btn-link {
+        background: none;
+        border: none;
+        color: #007aff; /* Standard blue link color */
+        cursor: pointer;
+        padding: 0;
+        font-size: 11px;
+        text-decoration: underline;
+      }
+
+      .btn-link:disabled {
+        color: #8e8e93;
+        text-decoration: none;
+        cursor: not-allowed;
+      }
+
+      /* ==================== CARD COMPONENTS ==================== */
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        min-height: 0; /* Allows card content to scroll */
+      }
+
+      /* Cards that need scrollable content */
+      .activity-card {
+        overflow: hidden;
+      }
+
+      /* ==================== TYPOGRAPHY ==================== */
+
+      h1 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+
+      h2 {
+        font-size: 16px;
+        margin: 0 0 10px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .title {
+        font-weight: 600;
+      }
+
+      .time {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      /* ==================== NOW PLAYING COMPONENTS ==================== */
+
+      .np {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+      }
+
+      .np-left {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .np-details {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        flex-grow: 1;
+        gap: 8px; /* Spacing between track info and controls */
+      }
+
+      .cover {
+        width: 256px;
+        height: 256px;
+        object-fit: cover;
+        box-shadow: var(--shadow);
+        background: var(--border); /* Fallback when no image */
+      }
+
+      /* ==================== TRANSPORT CONTROLS ==================== */
+
+      .controls-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 24px;
+        min-height: 40px;
+      }
+
+      .transport-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-self: start; /* Keep transport controls left-aligned */
+      }
+
+      .volume-area {
+        justify-self: stretch; /* Volume area takes remaining space */
+        min-width: 140px; /* Force minimum width even when empty */
+        min-height: 24px; /* Force minimum height */
+      }
+
+      .btn-icon {
+        appearance: none;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        line-height: 0;
+      }
+
+      .btn-icon img {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+        transition: opacity 0.15s ease-in-out;
+      }
+
+      .btn-icon:hover img {
+        opacity: 0.5;
+      }
+
+      .btn-icon:disabled {
+        cursor: not-allowed;
+      }
+
+      .btn-icon:disabled img {
+        opacity: 0.4;
+      }
+
+      .volume-placeholder {
+        flex-grow: 1;
+        height: 24px; /* Same height as volume slider */
+        visibility: hidden; /* Takes up space but invisible */
+      }
+
+      .volume-slider {
+        flex-grow: 1;
+        transform: translateY(
+          2px
+        ); /* Visual alignment with transport buttons */
+      }
+
+      /* ==================== GENRE FILTER COMPONENTS ==================== */
+
+      .genre-card-content {
+        flex-grow: 1;
+        overflow-y: auto;
+        min-height: 0;
+        padding-right: 10px; /* Space for scrollbar */
+      }
+
+      .toggle-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px; /* Compact spacing */
+      }
+
+      .toggle-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+        padding: 4px 0; /* Easier click targets */
+      }
+
+      .toggle-item[data-disabled='true'] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        background-color: #ccc;
+        border-radius: 34px;
+        transition: background-color 0.2s;
+        flex-shrink: 0;
+      }
+
+      .toggle-switch::before {
+        content: '';
+        position: absolute;
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+      }
+
+      .toggle-item[data-active='true'] .toggle-switch {
+        background-color: var(--primary);
+      }
+
+      .toggle-item[data-active='true'] .toggle-switch::before {
+        transform: translateX(20px);
+      }
+
+      /* ==================== ACTIVITY FEED COMPONENTS ==================== */
+
+      .activity {
+        flex-grow: 1;
+        overflow-y: auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .item {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        width: 100%;
+      }
+
+      button.item {
+        background: transparent;
+        transition: background-color 0.15s ease-in-out;
+        cursor: pointer;
+      }
+
+      button.item:hover {
+        background: var(--border);
+      }
+
+      .thumb {
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        background: var(--border);
+        flex-shrink: 0;
+      }
+
+      /* ==================== LOADING ANIMATIONS ==================== */
+
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.55);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ==================== UTILITY CLASSES ==================== */
+
+      .list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Main React application mount point -->
+    <div id="root"></div>
+
+    <!-- External React dependencies from CDN -->
+    <script
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+      crossorigin
+    ></script>
+
+    <!-- Main application JavaScript -->
+    <script src="./index.js"></script>
+  </body>
 </html>
