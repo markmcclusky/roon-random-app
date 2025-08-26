@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('roon', {
   getFilters:        () => ipcRenderer.invoke('roon:getFilters'),
   setFilters:        (filters) => ipcRenderer.invoke('roon:setFilters', filters),
   listGenres:        () => ipcRenderer.invoke('roon:listGenres'),
+  getSubgenres:      (genreTitle) => ipcRenderer.invoke('roon:getSubgenres', genreTitle),
   playRandomAlbum:   (genres) => ipcRenderer.invoke('roon:playRandomAlbum', genres),
   playAlbumByName:   (album, artist) => ipcRenderer.invoke('roon:playAlbumByName', album, artist),
   playRandomAlbumByArtist: (artist, currentAlbum) => ipcRenderer.invoke('roon:playRandomAlbumByArtist', artist, currentAlbum),
