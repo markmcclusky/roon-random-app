@@ -83,27 +83,29 @@ jobs:
     - name: Find build artifacts
       id: artifacts
       run: |
-        # Find the built files
-        DMG_ARM64=$(find out -name "*arm64*.dmg" -type f | head -1)
-        DMG_X64=$(find out -name "*x64*.dmg" -type f | head -1)
-        ZIP_ARM64=$(find out -name "*arm64*.zip" -type f | head -1)
-        ZIP_X64=$(find out -name "*x64*.zip" -type f | head -1)
+        # Show what was actually built
+        echo "Contents of out/ directory:"
+        find out -type f -name "*.dmg" -o -name "*.zip" | sort
         
-        # Output the paths for later steps
-        echo "DMG_ARM64=$DMG_ARM64" >> $GITHUB_OUTPUT
-        echo "DMG_X64=$DMG_X64" >> $GITHUB_OUTPUT
-        echo "ZIP_ARM64=$ZIP_ARM64" >> $GITHUB_OUTPUT
-        echo "ZIP_X64=$ZIP_X64" >> $GITHUB_OUTPUT
+        # Find the built files (more flexible pattern matching)
+        DMG_FILES=($(find out -name "*.dmg" -type f))
+        ZIP_FILES=($(find out -name "*.zip" -type f))
         
-        # Log what we found
-        echo "Found artifacts:"
-        echo "  ARM64 DMG: $DMG_ARM64"
-        echo "  x64 DMG: $DMG_X64"
-        echo "  ARM64 ZIP: $ZIP_ARM64"
-        echo "  x64 ZIP: $ZIP_X64"
+        echo "Found ${#DMG_FILES[@]} DMG files and ${#ZIP_FILES[@]} ZIP files"
         
-        # Verify files exist
-        ls -la out/
+        # Extract the single DMG (electron-forge builds only for current architecture in CI)
+        if [ ${#DMG_FILES[@]} -gt 0 ]; then
+          MAIN_DMG="${DMG_FILES[0]}"
+          echo "MAIN_DMG=$MAIN_DMG" >> $GITHUB_OUTPUT
+          echo "Found DMG: $MAIN_DMG"
+        fi
+        
+        # Extract the single ZIP
+        if [ ${#ZIP_FILES[@]} -gt 0 ]; then
+          MAIN_ZIP="${ZIP_FILES[0]}"
+          echo "MAIN_ZIP=$MAIN_ZIP" >> $GITHUB_OUTPUT
+          echo "Found ZIP: $MAIN_ZIP"
+        fi
     
     # Create GitHub Release using GitHub CLI (more reliable)
     - name: Create Release and Upload Assets
@@ -111,6 +113,14 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Create release with GitHub CLI
+        RELEASE_FILES=""
+        if [ -n "${{ steps.artifacts.outputs.MAIN_DMG }}" ]; then
+          RELEASE_FILES="$RELEASE_FILES ${{ steps.artifacts.outputs.MAIN_DMG }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg"
+        fi
+        if [ -n "${{ steps.artifacts.outputs.MAIN_ZIP }}" ]; then
+          RELEASE_FILES="$RELEASE_FILES ${{ steps.artifacts.outputs.MAIN_ZIP }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.zip"
+        fi
+        
         gh release create "${{ steps.version.outputs.TAG_NAME }}" \
           --title "Roon Random Album ${{ steps.version.outputs.VERSION }}" \
           --notes "## Roon Random Album ${{ steps.version.outputs.VERSION }}
@@ -118,15 +128,22 @@ jobs:
         ### Downloads
         
         **macOS**
-        - **Apple Silicon (M1/M2/M3/M4)**: Download the \`arm64.dmg\` file
-        - **Intel Macs**: Download the \`x64.dmg\` file
+        - Download the \`.dmg\` file for easy installation
+        - Or download the \`.zip\` file for manual installation
         
         ### Installation
         
-        1. Download the appropriate \`.dmg\` file for your Mac
+        **DMG Method (Recommended):**
+        1. Download the \`.dmg\` file
         2. Open the DMG and drag the app to your Applications folder
         3. Launch \"Roon Random Album\" from Applications
-        4. If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click \"Open Anyway\"
+        
+        **ZIP Method:**
+        1. Download and extract the \`.zip\` file
+        2. Copy the app to your Applications folder
+        3. Launch \"Roon Random Album\" from Applications
+        
+        If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click \"Open Anyway\"
         
         ### What's New
         
@@ -139,10 +156,7 @@ jobs:
         - Active Roon subscription and Roon Core running on your network
         
         **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions." \
-          "${{ steps.artifacts.outputs.DMG_ARM64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg" \
-          "${{ steps.artifacts.outputs.DMG_X64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg" \
-          "${{ steps.artifacts.outputs.ZIP_ARM64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.zip" \
-          "${{ steps.artifacts.outputs.ZIP_X64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.zip"
+          $RELEASE_FILES
     
     # Post-build summary
     - name: Build Summary
