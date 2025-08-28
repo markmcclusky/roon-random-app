@@ -735,7 +735,7 @@
       } else {
         setLocalVolume(null);
       }
-    }, [currentZone?.volume?.value, currentZone.volume]);
+    }, [currentZone?.volume?.value]);
 
     // ==================== KEYBOARD SHORTCUTS ====================
 
