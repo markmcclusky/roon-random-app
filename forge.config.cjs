@@ -3,12 +3,15 @@ const {
   AutoUnpackNativesPlugin,
 } = require('@electron-forge/plugin-auto-unpack-natives');
 
+const packageJson = require('./package.json');
+
 module.exports = {
   packagerConfig: {
     asar: true,
     appBundleId: 'com.markmcc.roonrandom',
     appCategoryType: 'public.app-category.music',
     icon: 'assets/icon',
+    appCopyright: `Copyright © ${new Date().getFullYear()} ${packageJson.author.name}`,
     // Enable signing and notarization for CI/CD
     osxSign: process.env.CI ? {
       identity: 'Developer ID Application: Mark McClusky',
