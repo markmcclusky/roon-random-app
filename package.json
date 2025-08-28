@@ -112,5 +112,5 @@
         "name": "@electron-forge/plugin-auto-unpack-natives"
       }
     ]
-  },
+  }
 }

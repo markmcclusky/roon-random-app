@@ -26,11 +26,7 @@ module.exports = {
   makers: [
     { 
       name: '@electron-forge/maker-zip', 
-      platforms: ['darwin'],
-      config: {
-        // Build for both architectures
-        arch: ['x64', 'arm64']
-      }
+      platforms: ['darwin']
     },
     { 
       name: '@electron-forge/maker-dmg', 
@@ -38,9 +34,7 @@ module.exports = {
         format: 'ULFO',
         name: 'Roon Random Album',
         title: 'Roon Random Album ${version}',
-        icon: 'assets/icon.icns',
-        // Build for both architectures  
-        arch: ['x64', 'arm64']
+        icon: 'assets/icon.icns'
       } 
     },
   ],
