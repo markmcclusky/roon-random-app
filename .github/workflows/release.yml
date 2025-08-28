@@ -20,6 +20,11 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+# Explicit permissions for GitHub API access
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build-and-release:
     runs-on: macos-latest
