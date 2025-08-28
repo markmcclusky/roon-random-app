@@ -32,8 +32,8 @@ module.exports = {
       name: '@electron-forge/maker-dmg', 
       config: { 
         format: 'ULFO',
-        name: 'Roon Random Album',
-        title: 'Roon Random ${version}',  // Shorter for testing
+        name: 'Roon-Random-Album-${version}',
+        title: 'Roon Random Album ${version}',
         icon: 'assets/icon.icns'
       } 
     },
