@@ -113,12 +113,16 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Create release with GitHub CLI
-        RELEASE_FILES=""
+        echo "Debug: MAIN_DMG='${{ steps.artifacts.outputs.MAIN_DMG }}'"
+        echo "Debug: MAIN_ZIP='${{ steps.artifacts.outputs.MAIN_ZIP }}'"
+        
+        # Build release command with proper quoting
+        RELEASE_ARGS=()
         if [ -n "${{ steps.artifacts.outputs.MAIN_DMG }}" ]; then
-          RELEASE_FILES="$RELEASE_FILES ${{ steps.artifacts.outputs.MAIN_DMG }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg"
+          RELEASE_ARGS+=("${{ steps.artifacts.outputs.MAIN_DMG }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg")
         fi
         if [ -n "${{ steps.artifacts.outputs.MAIN_ZIP }}" ]; then
-          RELEASE_FILES="$RELEASE_FILES ${{ steps.artifacts.outputs.MAIN_ZIP }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.zip"
+          RELEASE_ARGS+=("${{ steps.artifacts.outputs.MAIN_ZIP }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.zip")
         fi
         
         gh release create "${{ steps.version.outputs.TAG_NAME }}" \
@@ -156,7 +160,7 @@ jobs:
         - Active Roon subscription and Roon Core running on your network
         
         **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions." \
-          $RELEASE_FILES
+          "${RELEASE_ARGS[@]}"
     
     # Post-build summary
     - name: Build Summary
