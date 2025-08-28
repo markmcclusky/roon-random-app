@@ -1,0 +1,193 @@
+name: Build and Release
+
+on:
+  # Trigger on version tags (e.g., v1.0.4)
+  push:
+    tags:
+      - 'v*.*.*'
+  
+  # Allow manual triggering with version input
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.4)'
+        required: true
+        type: string
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+      
+    - name: Set version from input or tag
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v$VERSION" >> $GITHUB_OUTPUT
+          # Update package.json version
+          npm version $VERSION --no-git-tag-version
+        else
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT  
+          echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+          # Update package.json to match tag
+          npm version $VERSION --no-git-tag-version
+        fi
+        echo "Building version: $VERSION"
+    
+    # Import Apple certificates for code signing
+    - name: Import Code-Signing Certificates
+      uses: apple-actions/import-codesign-certs@v3
+      with:
+        # P12 file containing your Developer ID Application certificate
+        p12-file-base64: ${{ secrets.APPLE_CERTIFICATES }}
+        p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+    
+    # Build and package the app with signing and notarization
+    - name: Build Electron app
+      run: npm run make
+      env:
+        # Set CI flag to enable signing/notarization in forge config
+        CI: true
+        # Apple Developer credentials for notarization
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # GitHub token for potential releases
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Find built files for release
+    - name: Find build artifacts
+      id: artifacts
+      run: |
+        # Find the built files
+        DMG_ARM64=$(find out -name "*arm64*.dmg" -type f | head -1)
+        DMG_X64=$(find out -name "*x64*.dmg" -type f | head -1)
+        ZIP_ARM64=$(find out -name "*arm64*.zip" -type f | head -1)
+        ZIP_X64=$(find out -name "*x64*.zip" -type f | head -1)
+        
+        # Output the paths for later steps
+        echo "DMG_ARM64=$DMG_ARM64" >> $GITHUB_OUTPUT
+        echo "DMG_X64=$DMG_X64" >> $GITHUB_OUTPUT
+        echo "ZIP_ARM64=$ZIP_ARM64" >> $GITHUB_OUTPUT
+        echo "ZIP_X64=$ZIP_X64" >> $GITHUB_OUTPUT
+        
+        # Log what we found
+        echo "Found artifacts:"
+        echo "  ARM64 DMG: $DMG_ARM64"
+        echo "  x64 DMG: $DMG_X64"
+        echo "  ARM64 ZIP: $ZIP_ARM64"
+        echo "  x64 ZIP: $ZIP_X64"
+        
+        # Verify files exist
+        ls -la out/
+    
+    # Create GitHub Release
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.TAG_NAME }}
+        release_name: Roon Random Album ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        body: |
+          ## Roon Random Album ${{ steps.version.outputs.VERSION }}
+          
+          ### Downloads
+          
+          **macOS**
+          - **Apple Silicon (M1/M2/M3/M4)**: Download the `arm64.dmg` file
+          - **Intel Macs**: Download the `x64.dmg` file
+          
+          ### Installation
+          
+          1. Download the appropriate `.dmg` file for your Mac
+          2. Open the DMG and drag the app to your Applications folder
+          3. Launch "Roon Random Album" from Applications
+          4. If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click "Open Anyway"
+          
+          ### What's New
+          
+          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.version.outputs.TAG_NAME }}) for detailed changes in this release.
+          
+          ---
+          
+          **Requirements**: 
+          - macOS 10.15 or later
+          - Active Roon subscription and Roon Core running on your network
+          
+          **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions.
+    
+    # Upload release assets
+    - name: Upload ARM64 DMG
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.artifacts.outputs.DMG_ARM64 }}
+        asset_name: Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg
+        asset_content_type: application/octet-stream
+    
+    - name: Upload x64 DMG
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.artifacts.outputs.DMG_X64 }}
+        asset_name: Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg
+        asset_content_type: application/octet-stream
+    
+    - name: Upload ARM64 ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.artifacts.outputs.ZIP_ARM64 }}
+        asset_name: Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.zip
+        asset_content_type: application/zip
+    
+    - name: Upload x64 ZIP  
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.artifacts.outputs.ZIP_X64 }}
+        asset_name: Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.zip
+        asset_content_type: application/zip
+    
+    # Post-build summary
+    - name: Build Summary
+      run: |
+        echo "✅ Build completed successfully!"
+        echo "📦 Version: ${{ steps.version.outputs.VERSION }}"
+        echo "🏷️  Tag: ${{ steps.version.outputs.TAG_NAME }}"
+        echo "🚀 Release: ${{ steps.create_release.outputs.html_url }}"
