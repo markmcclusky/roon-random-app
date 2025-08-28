@@ -71,9 +71,9 @@ jobs:
         p12-file-base64: ${{ secrets.APPLE_CERTIFICATES }}
         p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
     
-    # Build and package the app with signing and notarization
-    - name: Build Electron app
-      run: npm run make
+    # Build and package the app with signing and notarization (multi-arch)
+    - name: Build Electron app - ARM64
+      run: npm run make -- --arch=arm64
       env:
         # Set CI flag to enable signing/notarization in forge config
         CI: true
@@ -83,8 +83,36 @@ jobs:
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         # GitHub token for potential releases
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Preserve ARM64 DMG
+      run: |
+        # Rename ARM64 DMG to prevent overwrite
+        if [ -f "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg" ]; then
+          mv "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg" "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg"
+          echo "Renamed ARM64 DMG"
+        fi
+
+    - name: Build Electron app - Intel (x64)
+      run: npm run make -- --arch=x64
+      env:
+        # Set CI flag to enable signing/notarization in forge config
+        CI: true
+        # Apple Developer credentials for notarization
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # GitHub token for potential releases
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Preserve x64 DMG
+      run: |
+        # Rename x64 DMG for clarity
+        if [ -f "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg" ]; then
+          mv "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg" "out/make/Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg"
+          echo "Renamed x64 DMG"
+        fi
     
-    # Find built files for release
+    # Find built files for release (multi-arch)
     - name: Find build artifacts
       id: artifacts
       run: |
@@ -92,25 +120,23 @@ jobs:
         echo "Contents of out/ directory:"
         find out -type f -name "*.dmg" -o -name "*.zip" | sort
         
-        # Find the built files (more flexible pattern matching)
-        DMG_FILES=($(find out -name "*.dmg" -type f))
-        ZIP_FILES=($(find out -name "*.zip" -type f))
+        # Find architecture-specific files (now properly named)
+        DMG_ARM64=$(find out -name "*arm64*.dmg" | head -1)
+        DMG_X64=$(find out -name "*x64*.dmg" | head -1)  
+        ZIP_ARM64=$(find out -name "*darwin-arm64*.zip" | head -1)
+        ZIP_X64=$(find out -name "*darwin-x64*.zip" | head -1)
         
-        echo "Found ${#DMG_FILES[@]} DMG files and ${#ZIP_FILES[@]} ZIP files"
+        # Output findings
+        echo "DMG_ARM64=$DMG_ARM64" >> $GITHUB_OUTPUT
+        echo "DMG_X64=$DMG_X64" >> $GITHUB_OUTPUT
+        echo "ZIP_ARM64=$ZIP_ARM64" >> $GITHUB_OUTPUT
+        echo "ZIP_X64=$ZIP_X64" >> $GITHUB_OUTPUT
         
-        # Extract the single DMG (electron-forge builds only for current architecture in CI)
-        if [ ${#DMG_FILES[@]} -gt 0 ]; then
-          MAIN_DMG="${DMG_FILES[0]}"
-          echo "MAIN_DMG=$MAIN_DMG" >> $GITHUB_OUTPUT
-          echo "Found DMG: $MAIN_DMG"
-        fi
-        
-        # Extract the single ZIP
-        if [ ${#ZIP_FILES[@]} -gt 0 ]; then
-          MAIN_ZIP="${ZIP_FILES[0]}"
-          echo "MAIN_ZIP=$MAIN_ZIP" >> $GITHUB_OUTPUT
-          echo "Found ZIP: $MAIN_ZIP"
-        fi
+        echo "Found artifacts:"
+        echo "  ARM64 DMG: $DMG_ARM64"
+        echo "  x64 DMG: $DMG_X64"
+        echo "  ARM64 ZIP: $ZIP_ARM64"
+        echo "  x64 ZIP: $ZIP_X64"
     
     # Create GitHub Release using GitHub CLI (simplified approach)
     - name: Create Release
@@ -125,8 +151,9 @@ jobs:
         ### Downloads
         
         **macOS**
-        - Download the \`.dmg\` file for easy installation
-        - Or download the \`.zip\` file for manual installation
+        - **Apple Silicon (M1/M2/M3/M4)**: Download the `arm64.dmg` file
+        - **Intel Macs**: Download the `x64.dmg` file  
+        - **Alternative**: ZIP files available for manual installation
         
         ### Installation
         
@@ -154,31 +181,33 @@ jobs:
         
         **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions."
 
-    # Upload assets separately (handles filenames with spaces better)  
+    # Upload assets separately (multi-arch support)  
     - name: Upload Release Assets
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Detect runner architecture
-        RUNNER_ARCH=$(uname -m)
-        if [ "$RUNNER_ARCH" = "arm64" ]; then
-          ARCH_SUFFIX="arm64"
-        else
-          ARCH_SUFFIX="x64"  
+        # Upload ARM64 DMG
+        if [ -n "${{ steps.artifacts.outputs.DMG_ARM64 }}" ]; then
+          echo "Uploading ARM64 DMG: ${{ steps.artifacts.outputs.DMG_ARM64 }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.DMG_ARM64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg" --clobber
         fi
         
-        # Find and upload DMG with architecture suffix
-        DMG_FILE=$(find out -name "*.dmg" -type f | head -1)
-        if [ -n "$DMG_FILE" ]; then
-          echo "Uploading DMG: $DMG_FILE (as ${ARCH_SUFFIX})"
-          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$DMG_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.dmg" --clobber
+        # Upload x64 DMG
+        if [ -n "${{ steps.artifacts.outputs.DMG_X64 }}" ]; then
+          echo "Uploading x64 DMG: ${{ steps.artifacts.outputs.DMG_X64 }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.DMG_X64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg" --clobber
         fi
         
-        # Find and upload ZIP with architecture suffix
-        ZIP_FILE=$(find out -name "*.zip" -type f | head -1)
-        if [ -n "$ZIP_FILE" ]; then
-          echo "Uploading ZIP: $ZIP_FILE (as ${ARCH_SUFFIX})"
-          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$ZIP_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.zip" --clobber
+        # Upload ARM64 ZIP
+        if [ -n "${{ steps.artifacts.outputs.ZIP_ARM64 }}" ]; then
+          echo "Uploading ARM64 ZIP: ${{ steps.artifacts.outputs.ZIP_ARM64 }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.ZIP_ARM64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.zip" --clobber
+        fi
+        
+        # Upload x64 ZIP
+        if [ -n "${{ steps.artifacts.outputs.ZIP_X64 }}" ]; then
+          echo "Uploading x64 ZIP: ${{ steps.artifacts.outputs.ZIP_X64 }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.ZIP_X64 }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.zip" --clobber
         fi
     
     # Post-build summary
