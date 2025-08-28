@@ -735,7 +735,7 @@
       } else {
         setLocalVolume(null);
       }
-    }, [currentZone?.volume?.value]);
+    }, [currentZone?.volume?.value, currentZone.volume]);
 
     // ==================== KEYBOARD SHORTCUTS ====================
 
@@ -804,6 +804,9 @@
       roon.state.lastZoneId,
       nowPlaying.artist,
       nowPlaying.album,
+      handleMoreFromArtist,
+      handlePlayRandomAlbum,
+      roon,
     ]);
 
     // ==================== EVENT HANDLERS ====================

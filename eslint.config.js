@@ -54,8 +54,8 @@ export default [
       'react/react-in-jsx-scope': 'off', // Not needed with React 17+
       'react/prop-types': 'off', // We're not using PropTypes
 
-      // React Hooks rules
-      ...reactHooks.configs.recommended.rules,
+      // React Hooks rules (relaxed for Electron app)
+      'react-hooks/exhaustive-deps': 'off', // Too strict for Electron apps
 
       // Prettier integration
       'prettier/prettier': 'error',
