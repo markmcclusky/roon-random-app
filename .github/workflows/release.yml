@@ -149,7 +149,7 @@ jobs:
         ---
         
         **Requirements**: 
-        - macOS 10.15 or later
+        - macOS 12.0 (Monterey) or later
         - Active Roon subscription and Roon Core running on your network
         
         **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions."
