@@ -107,24 +107,12 @@ jobs:
           echo "Found ZIP: $MAIN_ZIP"
         fi
     
-    # Create GitHub Release using GitHub CLI (more reliable)
-    - name: Create Release and Upload Assets
+    # Create GitHub Release using GitHub CLI (simplified approach)
+    - name: Create Release
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Create release with GitHub CLI
-        echo "Debug: MAIN_DMG='${{ steps.artifacts.outputs.MAIN_DMG }}'"
-        echo "Debug: MAIN_ZIP='${{ steps.artifacts.outputs.MAIN_ZIP }}'"
-        
-        # Build release command with proper quoting
-        RELEASE_ARGS=()
-        if [ -n "${{ steps.artifacts.outputs.MAIN_DMG }}" ]; then
-          RELEASE_ARGS+=("${{ steps.artifacts.outputs.MAIN_DMG }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.dmg")
-        fi
-        if [ -n "${{ steps.artifacts.outputs.MAIN_ZIP }}" ]; then
-          RELEASE_ARGS+=("${{ steps.artifacts.outputs.MAIN_ZIP }}#Roon-Random-Album-${{ steps.version.outputs.VERSION }}.zip")
-        fi
-        
+        # Create release first (without assets)
         gh release create "${{ steps.version.outputs.TAG_NAME }}" \
           --title "Roon Random Album ${{ steps.version.outputs.VERSION }}" \
           --notes "## Roon Random Album ${{ steps.version.outputs.VERSION }}
@@ -159,8 +147,26 @@ jobs:
         - macOS 10.15 or later
         - Active Roon subscription and Roon Core running on your network
         
-        **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions." \
-          "${RELEASE_ARGS[@]}"
+        **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions."
+
+    # Upload assets separately (handles filenames with spaces better)  
+    - name: Upload Release Assets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Find and upload DMG
+        DMG_FILE=$(find out -name "*.dmg" -type f | head -1)
+        if [ -n "$DMG_FILE" ]; then
+          echo "Uploading DMG: $DMG_FILE"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$DMG_FILE" --clobber
+        fi
+        
+        # Find and upload ZIP
+        ZIP_FILE=$(find out -name "*.zip" -type f | head -1)
+        if [ -n "$ZIP_FILE" ]; then
+          echo "Uploading ZIP: $ZIP_FILE" 
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$ZIP_FILE" --clobber
+        fi
     
     # Post-build summary
     - name: Build Summary
