@@ -1,0 +1,190 @@
+name: Build and Release
+# Automated build, sign, and release workflow
+
+on:
+  # Trigger on version tags (e.g., v1.0.4)
+  push:
+    tags:
+      - 'v*.*.*'
+  
+  # Allow manual triggering with version input
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.4)'
+        required: true
+        type: string
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Explicit permissions for GitHub API access
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+      
+    - name: Set version from input or tag
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v$VERSION" >> $GITHUB_OUTPUT
+          # Update package.json version
+          npm version $VERSION --no-git-tag-version
+        else
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT  
+          echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+          # Update package.json to match tag
+          npm version $VERSION --no-git-tag-version
+        fi
+        echo "Building version: $VERSION"
+    
+    # Import Apple certificates for code signing
+    - name: Import Code-Signing Certificates
+      uses: apple-actions/import-codesign-certs@v3
+      with:
+        # P12 file containing your Developer ID Application certificate
+        p12-file-base64: ${{ secrets.APPLE_CERTIFICATES }}
+        p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+    
+    # Build and package the app with signing and notarization
+    - name: Build Electron app
+      run: npm run make
+      env:
+        # Set CI flag to enable signing/notarization in forge config
+        CI: true
+        # Apple Developer credentials for notarization
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # GitHub token for potential releases
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Find built files for release
+    - name: Find build artifacts
+      id: artifacts
+      run: |
+        # Show what was actually built
+        echo "Contents of out/ directory:"
+        find out -type f -name "*.dmg" -o -name "*.zip" | sort
+        
+        # Find the built files (more flexible pattern matching)
+        DMG_FILES=($(find out -name "*.dmg" -type f))
+        ZIP_FILES=($(find out -name "*.zip" -type f))
+        
+        echo "Found ${#DMG_FILES[@]} DMG files and ${#ZIP_FILES[@]} ZIP files"
+        
+        # Extract the single DMG (electron-forge builds only for current architecture in CI)
+        if [ ${#DMG_FILES[@]} -gt 0 ]; then
+          MAIN_DMG="${DMG_FILES[0]}"
+          echo "MAIN_DMG=$MAIN_DMG" >> $GITHUB_OUTPUT
+          echo "Found DMG: $MAIN_DMG"
+        fi
+        
+        # Extract the single ZIP
+        if [ ${#ZIP_FILES[@]} -gt 0 ]; then
+          MAIN_ZIP="${ZIP_FILES[0]}"
+          echo "MAIN_ZIP=$MAIN_ZIP" >> $GITHUB_OUTPUT
+          echo "Found ZIP: $MAIN_ZIP"
+        fi
+    
+    # Create GitHub Release using GitHub CLI (simplified approach)
+    - name: Create Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Create release first (without assets)
+        gh release create "${{ steps.version.outputs.TAG_NAME }}" \
+          --title "Roon Random Album ${{ steps.version.outputs.VERSION }}" \
+          --notes "## Roon Random Album ${{ steps.version.outputs.VERSION }}
+        
+        ### Downloads
+        
+        **macOS**
+        - Download the \`.dmg\` file for easy installation
+        - Or download the \`.zip\` file for manual installation
+        
+        ### Installation
+        
+        **DMG Method (Recommended):**
+        1. Download the \`.dmg\` file
+        2. Open the DMG and drag the app to your Applications folder
+        3. Launch \"Roon Random Album\" from Applications
+        
+        **ZIP Method:**
+        1. Download and extract the \`.zip\` file
+        2. Copy the app to your Applications folder
+        3. Launch \"Roon Random Album\" from Applications
+        
+        If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click \"Open Anyway\"
+        
+        ### What's New
+        
+        See the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.version.outputs.TAG_NAME }}) for detailed changes in this release.
+        
+        ---
+        
+        **Requirements**: 
+        - macOS 12.0 (Monterey) or later
+        - Active Roon subscription and Roon Core running on your network
+        
+        **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions."
+
+    # Upload assets separately (handles filenames with spaces better)  
+    - name: Upload Release Assets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Detect runner architecture
+        RUNNER_ARCH=$(uname -m)
+        if [ "$RUNNER_ARCH" = "arm64" ]; then
+          ARCH_SUFFIX="arm64"
+        else
+          ARCH_SUFFIX="x64"  
+        fi
+        
+        # Find and upload DMG with architecture suffix
+        DMG_FILE=$(find out -name "*.dmg" -type f | head -1)
+        if [ -n "$DMG_FILE" ]; then
+          echo "Uploading DMG: $DMG_FILE (as ${ARCH_SUFFIX})"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$DMG_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.dmg" --clobber
+        fi
+        
+        # Find and upload ZIP with architecture suffix
+        ZIP_FILE=$(find out -name "*.zip" -type f | head -1)
+        if [ -n "$ZIP_FILE" ]; then
+          echo "Uploading ZIP: $ZIP_FILE (as ${ARCH_SUFFIX})"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$ZIP_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.zip" --clobber
+        fi
+    
+    # Post-build summary
+    - name: Build Summary
+      run: |
+        echo "✅ Build completed successfully!"
+        echo "📦 Version: ${{ steps.version.outputs.VERSION }}"
+        echo "🏷️  Tag: ${{ steps.version.outputs.TAG_NAME }}"
+        echo "🚀 Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"

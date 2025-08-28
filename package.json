@@ -31,12 +31,7 @@
     "make": "electron-forge make",
     "package": "electron-forge package",
     "publish": "electron-forge publish",
-    "build": "electron-builder",
-    "build:mac": "electron-builder --mac",
-    "build:mac-intel": "electron-builder --mac --x64",
-    "build:mac-arm": "electron-builder --mac --arm64",
-    "build:mac-both": "electron-builder --mac --x64 --arm64",
-    "dist": "npm run build",
+    "dist": "npm run make",
     "lint": "eslint . --ext js,jsx",
     "lint:fix": "eslint . --ext js,jsx --fix",
     "format": "prettier --write .",
@@ -117,45 +112,5 @@
         "name": "@electron-forge/plugin-auto-unpack-natives"
       }
     ]
-  },
-  "build": {
-    "appId": "com.markmcc.roonrandom",
-    "productName": "Roon Random Album",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "roonService.js",
-      "ipcHandlers.js",
-      "preload.cjs",
-      "renderer/**/*",
-      "node_modules/**/*"
-    ],
-    "mac": {
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.productivity",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
-    }
   }
 }

@@ -804,6 +804,9 @@
       roon.state.lastZoneId,
       nowPlaying.artist,
       nowPlaying.album,
+      handleMoreFromArtist,
+      handlePlayRandomAlbum,
+      roon,
     ]);
 
     // ==================== EVENT HANDLERS ====================
