@@ -159,18 +159,26 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Find and upload DMG
-        DMG_FILE=$(find out -name "*.dmg" -type f | head -1)
-        if [ -n "$DMG_FILE" ]; then
-          echo "Uploading DMG: $DMG_FILE"
-          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$DMG_FILE" --clobber
+        # Detect runner architecture
+        RUNNER_ARCH=$(uname -m)
+        if [ "$RUNNER_ARCH" = "arm64" ]; then
+          ARCH_SUFFIX="arm64"
+        else
+          ARCH_SUFFIX="x64"  
         fi
         
-        # Find and upload ZIP
+        # Find and upload DMG with architecture suffix
+        DMG_FILE=$(find out -name "*.dmg" -type f | head -1)
+        if [ -n "$DMG_FILE" ]; then
+          echo "Uploading DMG: $DMG_FILE (as ${ARCH_SUFFIX})"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$DMG_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.dmg" --clobber
+        fi
+        
+        # Find and upload ZIP with architecture suffix
         ZIP_FILE=$(find out -name "*.zip" -type f | head -1)
         if [ -n "$ZIP_FILE" ]; then
-          echo "Uploading ZIP: $ZIP_FILE" 
-          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$ZIP_FILE" --clobber
+          echo "Uploading ZIP: $ZIP_FILE (as ${ARCH_SUFFIX})"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "$ZIP_FILE#Roon-Random-Album-${{ steps.version.outputs.VERSION }}-${ARCH_SUFFIX}.zip" --clobber
         fi
     
     # Post-build summary
