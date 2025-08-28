@@ -33,7 +33,7 @@ module.exports = {
       config: { 
         format: 'ULFO',
         name: 'Roon Random Album',
-        title: 'Roon Random Album ${version}',
+        title: 'Roon Random ${version}',  // Shorter for testing
         icon: 'assets/icon.icns'
       } 
     },
