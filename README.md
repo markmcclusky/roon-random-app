@@ -39,7 +39,7 @@ A desktop application for discovering music through intelligent random album sel
 
 ## Screenshots
 
-![Main Interface](screenshots/main-interface.png)
+![Main Interface](screenshots/mainscreenshot.png)
 
 The app features a clean three-column layout:
 
