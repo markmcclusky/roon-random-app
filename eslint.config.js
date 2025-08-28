@@ -47,7 +47,7 @@ export default [
     rules: {
       // ESLint recommended overrides
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-console': 'warn',
+      'no-console': 'off', // Allow console statements in Node.js/Electron app
 
       // React rules
       ...react.configs.recommended.rules,
