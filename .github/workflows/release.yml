@@ -151,9 +151,9 @@ jobs:
         ### Downloads
         
         **macOS**
-        - **Apple Silicon (M1/M2/M3/M4)**: Download `Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg`
-        - **Intel Macs**: Download `Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg`
-        - **Alternative**: ZIP files also available (`-arm64.zip` for Apple Silicon, `-x64.zip` for Intel)
+        - **Apple Silicon (M1/M2/M3/M4)**: Download \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg\`
+        - **Intel Macs**: Download \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg\`
+        - **Alternative**: ZIP files also available (\`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.zip\` for Apple Silicon, \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.zip\` for Intel)
         
         ### Installation
         
