@@ -323,11 +323,11 @@ class AlbumSelector {
   }
 
   /**
-   * Builds a pool of albums by loading them in chunks and filtering out played ones
-   * @param {string} targetKey - Roon item key for the album list
+   * Builds a pool of album metadata by loading them in chunks and filtering out played ones
+   * @param {string} targetKey - Roon item key for the album list (used only for initial loading)
    * @param {Set} excludeSet - Set of played album keys to exclude
    * @param {Array} genreFilters - Genre filters for weighted selection
-   * @returns {Promise<Array>} Array of available album objects
+   * @returns {Promise<Array>} Array of available album metadata objects (without item_key)
    */
   async buildAlbumPool(targetKey, excludeSet, genreFilters = []) {
     const startTime = Date.now();
@@ -341,10 +341,12 @@ class AlbumSelector {
         throw new Error('No albums found in the current list');
       }
 
-      console.log(`AlbumSelector: Building pool from ${totalAlbums} albums`);
+      console.log(
+        `AlbumSelector: Building metadata pool from ${totalAlbums} albums`
+      );
 
-      // Load all albums in chunks
-      const albums = [];
+      // Load all albums in chunks, but only keep metadata (not item keys)
+      const albumMetadata = [];
       let apiCalls = 0;
 
       for (
@@ -367,30 +369,36 @@ class AlbumSelector {
           break; // No more items
         }
 
-        // Filter out played albums immediately
-        const availableAlbums = page.items.filter(album => {
+        // Filter and convert to metadata-only objects
+        for (const album of page.items) {
           if (!album?.title || !album?.subtitle) {
-            return false; // Skip malformed albums
+            continue; // Skip malformed albums
           }
 
           const albumKey = createAlbumKey(album.title, album.subtitle);
-          return !excludeSet.has(albumKey);
-        });
-
-        albums.push(...availableAlbums);
+          if (!excludeSet.has(albumKey)) {
+            // Store only metadata, not the ephemeral item_key
+            albumMetadata.push({
+              title: album.title,
+              subtitle: album.subtitle,
+              image_key: album.image_key || null,
+              // Note: item_key is intentionally excluded as it becomes stale
+            });
+          }
+        }
 
         // Progress logging for large collections
         if (offset > 0 && offset % 1000 === 0) {
           console.log(
-            `AlbumSelector: Processed ${offset}/${totalAlbums} albums, found ${albums.length} available`
+            `AlbumSelector: Processed ${offset}/${totalAlbums} albums, found ${albumMetadata.length} available`
           );
         }
       }
 
       // Apply weighted selection if genre filters are provided
-      let weightedAlbums = albums;
+      let weightedAlbums = albumMetadata;
       if (genreFilters.length > 0) {
-        weightedAlbums = this.applyGenreWeighting(albums, genreFilters);
+        weightedAlbums = this.applyGenreWeighting(albumMetadata, genreFilters);
       }
 
       // Shuffle the final pool
@@ -402,7 +410,7 @@ class AlbumSelector {
 
       const buildTime = Date.now() - startTime;
       console.log(
-        `AlbumSelector: Built pool of ${weightedAlbums.length} albums in ${buildTime}ms (${apiCalls} API calls)`
+        `AlbumSelector: Built metadata pool of ${weightedAlbums.length} albums in ${buildTime}ms (${apiCalls} API calls)`
       );
 
       return weightedAlbums;
@@ -550,6 +558,77 @@ class AlbumSelector {
 
 // Global album selector instance
 const albumSelector = new AlbumSelector();
+
+// ==================== FRESH KEY LOOKUP ====================
+
+/**
+ * Looks up a fresh item key for an album by title and artist
+ * @param {string} albumTitle - Album title to search for
+ * @param {string} artistName - Artist name to search for
+ * @param {Array} genreFilters - Genre filters to determine search scope
+ * @returns {Promise<Object>} Album object with fresh item_key
+ */
+async function findAlbumByMetadata(albumTitle, artistName, genreFilters = []) {
+  const startTime = Date.now();
+
+  try {
+    // Navigate to the appropriate album list (same as we did for selection)
+    const targetKey = await navigateToAlbumList(genreFilters);
+
+    // Get total album count
+    const header = await browseAsync({ hierarchy: 'browse' });
+    const totalAlbums = header?.list?.count ?? 0;
+
+    if (totalAlbums === 0) {
+      throw new Error('Album list is empty during lookup');
+    }
+
+    const albumTitleLower = albumTitle.toLowerCase();
+    const artistNameLower = artistName.toLowerCase();
+
+    // Search through albums to find exact match
+    for (
+      let offset = 0;
+      offset < totalAlbums;
+      offset += ALBUM_POOL_CHUNK_SIZE
+    ) {
+      const chunkSize = Math.min(ALBUM_POOL_CHUNK_SIZE, totalAlbums - offset);
+
+      const page = await loadAsync({
+        hierarchy: 'browse',
+        item_key: targetKey,
+        offset,
+        count: chunkSize,
+      });
+
+      if (!page.items || page.items.length === 0) {
+        break;
+      }
+
+      // Look for exact match in this chunk
+      const foundAlbum = page.items.find(
+        album =>
+          (album.title || '').toLowerCase() === albumTitleLower &&
+          (album.subtitle || '').toLowerCase() === artistNameLower
+      );
+
+      if (foundAlbum) {
+        const lookupTime = Date.now() - startTime;
+        console.log(
+          `AlbumSelector: Found fresh key for "${albumTitle}" by "${artistName}" in ${lookupTime}ms`
+        );
+        return foundAlbum; // This has a fresh item_key
+      }
+    }
+
+    throw new Error(
+      `Album "${albumTitle}" by "${artistName}" not found during fresh lookup`
+    );
+  } catch (error) {
+    console.error('AlbumSelector: Fresh key lookup failed:', error);
+    throw error;
+  }
+}
 
 // ==================== NOW PLAYING MANAGEMENT ====================
 
@@ -1199,10 +1278,10 @@ async function navigateToLibraryAlbums(root) {
 }
 
 /**
- * Selects a random album using the optimized pool-based approach
+ * Selects a random album using the optimized metadata-based approach
  * @param {string} targetKey - Item key for the album list
  * @param {Array} genreFilters - Genre filters for the current selection (optional)
- * @returns {Promise<Object>} Selected album object
+ * @returns {Promise<Object>} Selected album object with fresh item_key
  */
 async function selectRandomAlbum(targetKey, genreFilters = []) {
   const startTime = Date.now();
@@ -1211,41 +1290,49 @@ async function selectRandomAlbum(targetKey, genreFilters = []) {
 
   while (retryCount <= maxRetries) {
     try {
-      // Use the optimized album selector
-      const pool = await albumSelector.getShuffledPool(
+      // Use the optimized album selector to get metadata pool
+      const metadataPool = await albumSelector.getShuffledPool(
         targetKey,
         genreFilters,
         playedThisSession
       );
 
-      if (!pool || pool.length === 0) {
+      if (!metadataPool || metadataPool.length === 0) {
         // Fallback: clear session history and try again
         console.log(
           'AlbumSelector: No available albums, clearing session history'
         );
         playedThisSession.clear();
 
-        const freshPool = await albumSelector.getShuffledPool(
+        const freshMetadataPool = await albumSelector.getShuffledPool(
           targetKey,
           genreFilters,
           playedThisSession
         );
 
-        if (!freshPool || freshPool.length === 0) {
+        if (!freshMetadataPool || freshMetadataPool.length === 0) {
           throw new Error(
             'No albums available even after clearing session history'
           );
         }
 
-        const selectedAlbum = albumSelector.selectFromPool(freshPool);
-        if (!selectedAlbum) {
+        const selectedMetadata =
+          albumSelector.selectFromPool(freshMetadataPool);
+        if (!selectedMetadata) {
           throw new Error('Failed to select album from fresh pool');
         }
 
+        // Look up fresh item key for the selected album
+        const albumWithFreshKey = await findAlbumByMetadata(
+          selectedMetadata.title,
+          selectedMetadata.subtitle,
+          genreFilters
+        );
+
         // Mark as played and update metrics
         const albumKey = createAlbumKey(
-          selectedAlbum.title,
-          selectedAlbum.subtitle
+          selectedMetadata.title,
+          selectedMetadata.subtitle
         );
         playedThisSession.add(albumKey);
 
@@ -1253,23 +1340,30 @@ async function selectRandomAlbum(targetKey, genreFilters = []) {
         albumSelector.metrics.totalSelectTime += selectionTime;
 
         console.log(
-          `AlbumSelector: Selected "${selectedAlbum.title}" by "${selectedAlbum.subtitle}" in ${selectionTime}ms (fresh pool)`
+          `AlbumSelector: Selected "${selectedMetadata.title}" by "${selectedMetadata.subtitle}" in ${selectionTime}ms (fresh pool + lookup)`
         );
 
-        return selectedAlbum;
+        return albumWithFreshKey;
       }
 
-      // Select from existing pool
-      const selectedAlbum = albumSelector.selectFromPool(pool);
+      // Select from existing metadata pool
+      const selectedMetadata = albumSelector.selectFromPool(metadataPool);
 
-      if (!selectedAlbum) {
+      if (!selectedMetadata) {
         throw new Error('Failed to select album from pool');
       }
 
+      // Look up fresh item key for the selected album
+      const albumWithFreshKey = await findAlbumByMetadata(
+        selectedMetadata.title,
+        selectedMetadata.subtitle,
+        genreFilters
+      );
+
       // Mark as played and update metrics
       const albumKey = createAlbumKey(
-        selectedAlbum.title,
-        selectedAlbum.subtitle
+        selectedMetadata.title,
+        selectedMetadata.subtitle
       );
       playedThisSession.add(albumKey);
 
@@ -1277,12 +1371,12 @@ async function selectRandomAlbum(targetKey, genreFilters = []) {
       albumSelector.metrics.totalSelectTime += selectionTime;
 
       console.log(
-        `AlbumSelector: Selected "${selectedAlbum.title}" by "${selectedAlbum.subtitle}" in ${selectionTime}ms`
+        `AlbumSelector: Selected "${selectedMetadata.title}" by "${selectedMetadata.subtitle}" in ${selectionTime}ms (cached pool + lookup)`
       );
 
-      return selectedAlbum;
+      return albumWithFreshKey;
     } catch (error) {
-      // Check if this is a stale key error
+      // Check if this is a stale key error (shouldn't happen with metadata approach, but just in case)
       const wasStaleKey = albumSelector.handleStaleKeyError(error);
 
       if (wasStaleKey && retryCount < maxRetries) {
@@ -1294,7 +1388,7 @@ async function selectRandomAlbum(targetKey, genreFilters = []) {
       }
 
       console.error(
-        'AlbumSelector: Pool-based selection failed, falling back to legacy method:',
+        'AlbumSelector: Metadata-based selection failed, falling back to legacy method:',
         error
       );
 
@@ -1373,88 +1467,65 @@ async function selectRandomAlbumLegacy(targetKey) {
 }
 
 /**
- * Plays the selected album
+ * Plays the selected album (album should have fresh item_key from lookup)
  * @param {Object} album - Album object to play
  * @param {string} zoneId - Target zone ID
  */
 async function playAlbum(album, zoneId) {
-  try {
-    await browseAsync({ hierarchy: 'browse', item_key: album.item_key });
-    const albumPage = await loadAsync({
+  await browseAsync({ hierarchy: 'browse', item_key: album.item_key });
+  const albumPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 200,
+  });
+
+  // Try to get album art
+  let artKey = album?.image_key || albumPage?.list?.image_key || null;
+  if (!artKey) {
+    const itemWithArt = (albumPage?.items || []).find(item => item?.image_key);
+    if (itemWithArt) artKey = itemWithArt.image_key;
+  }
+  if (artKey && !album.image_key) album.image_key = artKey;
+
+  // Look for "Play Album" action
+  const playAlbumAction = (albumPage.items || []).find(
+    item => item.title === 'Play Album' && item.hint === 'action_list'
+  );
+
+  if (playAlbumAction?.item_key) {
+    await browseAsync({
       hierarchy: 'browse',
-      offset: 0,
-      count: 200,
+      item_key: playAlbumAction.item_key,
+      zone_or_output_id: zoneId,
     });
 
-    // Try to get album art
-    let artKey = album?.image_key || albumPage?.list?.image_key || null;
-    if (!artKey) {
-      const itemWithArt = (albumPage?.items || []).find(
-        item => item?.image_key
-      );
-      if (itemWithArt) artKey = itemWithArt.image_key;
-    }
-    if (artKey && !album.image_key) album.image_key = artKey;
+    const actions = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 20,
+    });
+    const playNowAction =
+      (actions.items || []).find(item =>
+        /play\s*now/i.test(item.title || '')
+      ) || (actions.items || [])[0];
 
-    // Look for "Play Album" action
-    const playAlbumAction = (albumPage.items || []).find(
-      item => item.title === 'Play Album' && item.hint === 'action_list'
-    );
-
-    if (playAlbumAction?.item_key) {
-      await browseAsync({
-        hierarchy: 'browse',
-        item_key: playAlbumAction.item_key,
-        zone_or_output_id: zoneId,
-      });
-
-      const actions = await loadAsync({
-        hierarchy: 'browse',
-        offset: 0,
-        count: 20,
-      });
-      const playNowAction =
-        (actions.items || []).find(item =>
-          /play\s*now/i.test(item.title || '')
-        ) || (actions.items || [])[0];
-
-      if (!playNowAction?.item_key) {
-        throw new Error('No playable action found');
-      }
-
-      await browseAsync({
-        hierarchy: 'browse',
-        item_key: playNowAction.item_key,
-        zone_or_output_id: zoneId,
-      });
-    } else {
-      // Fallback to play_from_here
-      await new Promise((resolve, reject) => {
-        transportService.play_from_here(
-          { zone_or_output_id: zoneId },
-          error => {
-            if (error) reject(error);
-            else resolve();
-          }
-        );
-      });
-    }
-  } catch (error) {
-    // Handle stale item key errors specifically
-    const wasStaleKey = albumSelector.handleStaleKeyError(error);
-
-    if (wasStaleKey) {
-      console.log(
-        'AlbumSelector: Stale key detected in playAlbum, cache cleared'
-      );
-      // Re-throw the error so the caller can handle the retry
-      throw new Error(
-        `InvalidItemKey: Album item key became stale - ${error.message}`
-      );
+    if (!playNowAction?.item_key) {
+      throw new Error('No playable action found');
     }
 
-    // Re-throw other errors
-    throw error;
+    await browseAsync({
+      hierarchy: 'browse',
+      item_key: playNowAction.item_key,
+      zone_or_output_id: zoneId,
+    });
+  } else {
+    // Fallback to play_from_here
+    await new Promise((resolve, reject) => {
+      transportService.play_from_here({ zone_or_output_id: zoneId }, error => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
   }
 }
 
