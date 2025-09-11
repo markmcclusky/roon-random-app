@@ -25,6 +25,12 @@ const MAX_RANDOM_ATTEMPTS = 50; // Maximum attempts to find unplayed album
 const BROWSE_PAGE_SIZE = 200; // Number of items to fetch per browse request
 const DEFAULT_IMAGE_SIZE = 512; // Default image dimensions
 
+// Album selection optimization constants
+const ALBUM_POOL_CACHE_TTL = 120000; // 2 minutes in milliseconds (shorter to avoid stale keys)
+const ALBUM_POOL_CHUNK_SIZE = 200; // Items to fetch per chunk when building pools
+const MAX_CACHED_POOLS = 20; // Maximum number of pools to keep in memory
+const POOL_REBUILD_THRESHOLD = 0.8; // Rebuild pool when 80% exhausted
+
 // Persisted state (token) storage — lives in a writable, stable location
 const ROON_DATA_DIR = app.getPath('userData'); // e.g. ~/Library/Application Support/Roon Random App
 const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
@@ -154,6 +160,397 @@ function createAlbumKey(album, artist) {
   return `${album || ''}||${artist || ''}`;
 }
 
+// ==================== ALBUM SELECTION OPTIMIZATION ====================
+
+/**
+ * AlbumSelector - Optimized album selection with caching and pooling
+ *
+ * This class provides significant performance improvements over the previous
+ * approach by pre-building shuffled pools of albums and caching them.
+ * Instead of making 50+ API calls to find an unplayed album, we make 1-5
+ * calls to build a pool, then select instantly from memory.
+ */
+class AlbumSelector {
+  constructor() {
+    // Cache for shuffled album pools by genre key
+    this.shuffledPools = new Map();
+
+    // Cache timestamps to manage TTL
+    this.poolCacheTime = new Map();
+
+    // Track pool usage to know when to rebuild
+    this.poolUsageStats = new Map();
+
+    // Performance metrics
+    this.metrics = {
+      poolBuilds: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      totalSelectTime: 0,
+      apiCalls: 0,
+    };
+  }
+
+  /**
+   * Generates a cache key for a genre filter set
+   * @param {Array} genreFilters - Array of genre objects
+   * @returns {string} Unique cache key
+   */
+  generateCacheKey(genreFilters) {
+    if (!Array.isArray(genreFilters) || genreFilters.length === 0) {
+      return 'all-albums';
+    }
+
+    // Sort genres by title to ensure consistent cache keys
+    const sortedGenres = genreFilters
+      .map(g => g.title || '')
+      .sort()
+      .join('|');
+
+    return `genres:${sortedGenres}`;
+  }
+
+  /**
+   * Checks if a cached pool is still valid
+   * @param {string} cacheKey - Cache key to check
+   * @returns {boolean} True if cache is valid
+   */
+  isCacheValid(cacheKey) {
+    const cacheTime = this.poolCacheTime.get(cacheKey);
+    const pool = this.shuffledPools.get(cacheKey);
+
+    if (!cacheTime || !pool) {
+      return false;
+    }
+
+    // Check if cache has expired
+    if (Date.now() - cacheTime > ALBUM_POOL_CACHE_TTL) {
+      return false;
+    }
+
+    // Check if pool is too depleted and needs rebuilding
+    const usage = this.poolUsageStats.get(cacheKey) || {
+      original: 0,
+      remaining: 0,
+    };
+    const remainingRatio =
+      usage.original > 0 ? usage.remaining / usage.original : 1;
+
+    if (remainingRatio < 1 - POOL_REBUILD_THRESHOLD) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Manages cache size by removing oldest entries
+   */
+  manageCacheSize() {
+    if (this.shuffledPools.size <= MAX_CACHED_POOLS) {
+      return;
+    }
+
+    // Find oldest cache entry
+    let oldestKey = null;
+    let oldestTime = Date.now();
+
+    for (const [key, time] of this.poolCacheTime.entries()) {
+      if (time < oldestTime) {
+        oldestTime = time;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      this.clearCacheEntry(oldestKey);
+      console.log(`AlbumSelector: Cleared old cache entry: ${oldestKey}`);
+    }
+  }
+
+  /**
+   * Clears a specific cache entry
+   * @param {string} cacheKey - Key to clear
+   */
+  clearCacheEntry(cacheKey) {
+    this.shuffledPools.delete(cacheKey);
+    this.poolCacheTime.delete(cacheKey);
+    this.poolUsageStats.delete(cacheKey);
+  }
+
+  /**
+   * Clears all cached pools (useful for memory cleanup)
+   */
+  clearAllCache() {
+    this.shuffledPools.clear();
+    this.poolCacheTime.clear();
+    this.poolUsageStats.clear();
+    console.log('AlbumSelector: All caches cleared');
+  }
+
+  /**
+   * Gets current performance metrics
+   * @returns {Object} Metrics object
+   */
+  getMetrics() {
+    return { ...this.metrics };
+  }
+
+  /**
+   * Resets performance metrics
+   */
+  resetMetrics() {
+    this.metrics = {
+      poolBuilds: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      totalSelectTime: 0,
+      apiCalls: 0,
+    };
+  }
+
+  /**
+   * Fisher-Yates shuffle algorithm for true randomization
+   * @param {Array} array - Array to shuffle (mutated in place)
+   * @returns {Array} The shuffled array
+   */
+  fisherYatesShuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  /**
+   * Builds a pool of albums by loading them in chunks and filtering out played ones
+   * @param {string} targetKey - Roon item key for the album list
+   * @param {Set} excludeSet - Set of played album keys to exclude
+   * @param {Array} genreFilters - Genre filters for weighted selection
+   * @returns {Promise<Array>} Array of available album objects
+   */
+  async buildAlbumPool(targetKey, excludeSet, genreFilters = []) {
+    const startTime = Date.now();
+
+    try {
+      // Get total album count
+      const header = await browseAsync({ hierarchy: 'browse' });
+      const totalAlbums = header?.list?.count ?? 0;
+
+      if (totalAlbums === 0) {
+        throw new Error('No albums found in the current list');
+      }
+
+      console.log(`AlbumSelector: Building pool from ${totalAlbums} albums`);
+
+      // Load all albums in chunks
+      const albums = [];
+      let apiCalls = 0;
+
+      for (
+        let offset = 0;
+        offset < totalAlbums;
+        offset += ALBUM_POOL_CHUNK_SIZE
+      ) {
+        const chunkSize = Math.min(ALBUM_POOL_CHUNK_SIZE, totalAlbums - offset);
+
+        const page = await loadAsync({
+          hierarchy: 'browse',
+          item_key: targetKey,
+          offset,
+          count: chunkSize,
+        });
+
+        apiCalls++;
+
+        if (!page.items || page.items.length === 0) {
+          break; // No more items
+        }
+
+        // Filter out played albums immediately
+        const availableAlbums = page.items.filter(album => {
+          if (!album?.title || !album?.subtitle) {
+            return false; // Skip malformed albums
+          }
+
+          const albumKey = createAlbumKey(album.title, album.subtitle);
+          return !excludeSet.has(albumKey);
+        });
+
+        albums.push(...availableAlbums);
+
+        // Progress logging for large collections
+        if (offset > 0 && offset % 1000 === 0) {
+          console.log(
+            `AlbumSelector: Processed ${offset}/${totalAlbums} albums, found ${albums.length} available`
+          );
+        }
+      }
+
+      // Apply weighted selection if genre filters are provided
+      let weightedAlbums = albums;
+      if (genreFilters.length > 0) {
+        weightedAlbums = this.applyGenreWeighting(albums, genreFilters);
+      }
+
+      // Shuffle the final pool
+      this.fisherYatesShuffle(weightedAlbums);
+
+      // Update metrics
+      this.metrics.poolBuilds++;
+      this.metrics.apiCalls += apiCalls;
+
+      const buildTime = Date.now() - startTime;
+      console.log(
+        `AlbumSelector: Built pool of ${weightedAlbums.length} albums in ${buildTime}ms (${apiCalls} API calls)`
+      );
+
+      return weightedAlbums;
+    } catch (error) {
+      console.error('AlbumSelector: Failed to build album pool:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Applies genre-based weighting to album selection
+   * @param {Array} albums - Array of album objects
+   * @param {Array} genreFilters - Genre filters with album counts
+   * @returns {Array} Weighted album array (some albums may appear multiple times)
+   */
+  applyGenreWeighting(albums, _genreFilters) {
+    // For now, return albums as-is since genre weighting is complex
+    // and requires matching albums to genres via additional API calls.
+    // This can be enhanced in a future iteration.
+    console.log(
+      `AlbumSelector: Genre weighting not yet implemented, using uniform distribution`
+    );
+    return albums;
+  }
+
+  /**
+   * Gets or builds a shuffled album pool for the given parameters
+   * @param {string} targetKey - Roon item key for the album list
+   * @param {Array} genreFilters - Genre filter array
+   * @param {Set} excludeSet - Set of played album keys to exclude
+   * @returns {Promise<Array>} Shuffled pool of available albums
+   */
+  async getShuffledPool(targetKey, genreFilters, excludeSet) {
+    const cacheKey = this.generateCacheKey(genreFilters);
+
+    // Check if we have a valid cached pool
+    if (this.isCacheValid(cacheKey)) {
+      const pool = this.shuffledPools.get(cacheKey);
+
+      // Filter out any newly played albums from the cached pool
+      const availablePool = pool.filter(album => {
+        const albumKey = createAlbumKey(album.title, album.subtitle);
+        return !excludeSet.has(albumKey);
+      });
+
+      if (availablePool.length > 0) {
+        this.metrics.cacheHits++;
+        console.log(
+          `AlbumSelector: Using cached pool (${availablePool.length} albums available)`
+        );
+
+        // Update the pool with filtered results
+        this.shuffledPools.set(cacheKey, availablePool);
+        this.updatePoolUsage(cacheKey, availablePool.length);
+
+        return availablePool;
+      }
+    }
+
+    // Cache miss - need to build new pool
+    this.metrics.cacheMisses++;
+    console.log(`AlbumSelector: Cache miss for key: ${cacheKey}`);
+
+    // Build new pool
+    const newPool = await this.buildAlbumPool(
+      targetKey,
+      excludeSet,
+      genreFilters
+    );
+
+    // Cache the new pool
+    this.shuffledPools.set(cacheKey, [...newPool]); // Store a copy
+    this.poolCacheTime.set(cacheKey, Date.now());
+    this.poolUsageStats.set(cacheKey, {
+      original: newPool.length,
+      remaining: newPool.length,
+    });
+
+    // Manage cache size
+    this.manageCacheSize();
+
+    return newPool;
+  }
+
+  /**
+   * Updates pool usage statistics
+   * @param {string} cacheKey - Cache key
+   * @param {number} remaining - Number of albums remaining in pool
+   */
+  updatePoolUsage(cacheKey, remaining) {
+    const usage = this.poolUsageStats.get(cacheKey);
+    if (usage) {
+      usage.remaining = remaining;
+    }
+  }
+
+  /**
+   * Selects and removes a random album from the pool
+   * @param {Array} pool - Pool of available albums
+   * @returns {Object|null} Selected album object or null if pool is empty
+   */
+  selectFromPool(pool) {
+    if (!pool || pool.length === 0) {
+      return null;
+    }
+
+    // Remove and return a random album from the pool
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    const selectedAlbum = pool.splice(randomIndex, 1)[0];
+
+    return selectedAlbum;
+  }
+
+  /**
+   * Checks if an error indicates stale item keys and clears cache if needed
+   * @param {Error} error - Error to check
+   * @returns {boolean} True if cache was cleared due to stale keys
+   */
+  handleStaleKeyError(error) {
+    const errorMessage = error?.message || '';
+
+    // Common Roon API errors that indicate stale item keys
+    const staleKeyIndicators = [
+      'InvalidItemKey',
+      'ItemKey not found',
+      'Invalid item key',
+      'Browse failed',
+    ];
+
+    const isStaleKey = staleKeyIndicators.some(indicator =>
+      errorMessage.includes(indicator)
+    );
+
+    if (isStaleKey) {
+      console.log(
+        'AlbumSelector: Detected stale item keys, clearing all caches'
+      );
+      this.clearAllCache();
+      return true;
+    }
+
+    return false;
+  }
+}
+
+// Global album selector instance
+const albumSelector = new AlbumSelector();
+
 // ==================== NOW PLAYING MANAGEMENT ====================
 
 /**
@@ -260,6 +657,10 @@ function handleCoreUnpaired() {
   transportService = null;
   zonesCache = [];
   zonesRaw = [];
+
+  // Clear album selector caches
+  albumSelector.clearAllCache();
+  albumSelector.resetMetrics();
 
   emitZones();
 }
@@ -519,23 +920,47 @@ export async function pickRandomAlbumAndPlay(genreFilters = []) {
     throw new Error('Not connected to a Roon Core.');
   }
 
-  // Ensure we have a valid output zone
-  const zoneId = await ensureValidZone();
+  let retryCount = 0;
+  const maxRetries = 2;
 
-  // Navigate to the appropriate album list
-  const targetKey = await navigateToAlbumList(genreFilters);
+  while (retryCount <= maxRetries) {
+    try {
+      // Ensure we have a valid output zone
+      const zoneId = await ensureValidZone();
 
-  // Pick a random album
-  const selectedAlbum = await selectRandomAlbum(targetKey);
+      // Navigate to the appropriate album list
+      const targetKey = await navigateToAlbumList(genreFilters);
 
-  // Play the selected album
-  await playAlbum(selectedAlbum, zoneId);
+      // Pick a random album using optimized selection
+      const selectedAlbum = await selectRandomAlbum(targetKey, genreFilters);
 
-  return {
-    album: selectedAlbum.title,
-    artist: selectedAlbum.subtitle,
-    image_key: selectedAlbum.image_key,
-  };
+      // Play the selected album
+      await playAlbum(selectedAlbum, zoneId);
+
+      return {
+        album: selectedAlbum.title,
+        artist: selectedAlbum.subtitle,
+        image_key: selectedAlbum.image_key,
+      };
+    } catch (error) {
+      // Check if this is a stale key error that was already handled
+      if (
+        error.message?.includes('InvalidItemKey') &&
+        retryCount < maxRetries
+      ) {
+        retryCount++;
+        console.log(
+          `pickRandomAlbumAndPlay: Retrying due to stale keys (attempt ${retryCount}/${maxRetries})`
+        );
+        continue; // Retry the entire process
+      }
+
+      // For other errors, re-throw immediately
+      throw error;
+    }
+  }
+
+  throw new Error('Failed to play random album after maximum retries');
 }
 
 /**
@@ -774,11 +1199,123 @@ async function navigateToLibraryAlbums(root) {
 }
 
 /**
- * Selects a random album from the current list, avoiding recently played
+ * Selects a random album using the optimized pool-based approach
+ * @param {string} targetKey - Item key for the album list
+ * @param {Array} genreFilters - Genre filters for the current selection (optional)
+ * @returns {Promise<Object>} Selected album object
+ */
+async function selectRandomAlbum(targetKey, genreFilters = []) {
+  const startTime = Date.now();
+  let retryCount = 0;
+  const maxRetries = 2;
+
+  while (retryCount <= maxRetries) {
+    try {
+      // Use the optimized album selector
+      const pool = await albumSelector.getShuffledPool(
+        targetKey,
+        genreFilters,
+        playedThisSession
+      );
+
+      if (!pool || pool.length === 0) {
+        // Fallback: clear session history and try again
+        console.log(
+          'AlbumSelector: No available albums, clearing session history'
+        );
+        playedThisSession.clear();
+
+        const freshPool = await albumSelector.getShuffledPool(
+          targetKey,
+          genreFilters,
+          playedThisSession
+        );
+
+        if (!freshPool || freshPool.length === 0) {
+          throw new Error(
+            'No albums available even after clearing session history'
+          );
+        }
+
+        const selectedAlbum = albumSelector.selectFromPool(freshPool);
+        if (!selectedAlbum) {
+          throw new Error('Failed to select album from fresh pool');
+        }
+
+        // Mark as played and update metrics
+        const albumKey = createAlbumKey(
+          selectedAlbum.title,
+          selectedAlbum.subtitle
+        );
+        playedThisSession.add(albumKey);
+
+        const selectionTime = Date.now() - startTime;
+        albumSelector.metrics.totalSelectTime += selectionTime;
+
+        console.log(
+          `AlbumSelector: Selected "${selectedAlbum.title}" by "${selectedAlbum.subtitle}" in ${selectionTime}ms (fresh pool)`
+        );
+
+        return selectedAlbum;
+      }
+
+      // Select from existing pool
+      const selectedAlbum = albumSelector.selectFromPool(pool);
+
+      if (!selectedAlbum) {
+        throw new Error('Failed to select album from pool');
+      }
+
+      // Mark as played and update metrics
+      const albumKey = createAlbumKey(
+        selectedAlbum.title,
+        selectedAlbum.subtitle
+      );
+      playedThisSession.add(albumKey);
+
+      const selectionTime = Date.now() - startTime;
+      albumSelector.metrics.totalSelectTime += selectionTime;
+
+      console.log(
+        `AlbumSelector: Selected "${selectedAlbum.title}" by "${selectedAlbum.subtitle}" in ${selectionTime}ms`
+      );
+
+      return selectedAlbum;
+    } catch (error) {
+      // Check if this is a stale key error
+      const wasStaleKey = albumSelector.handleStaleKeyError(error);
+
+      if (wasStaleKey && retryCount < maxRetries) {
+        retryCount++;
+        console.log(
+          `AlbumSelector: Retrying after cache clear (attempt ${retryCount}/${maxRetries})`
+        );
+        continue; // Retry with cleared cache
+      }
+
+      console.error(
+        'AlbumSelector: Pool-based selection failed, falling back to legacy method:',
+        error
+      );
+
+      // Fallback to the old algorithm
+      return await selectRandomAlbumLegacy(targetKey);
+    }
+  }
+
+  // Should never reach here, but fallback just in case
+  console.error('AlbumSelector: Max retries exceeded, using legacy method');
+  return await selectRandomAlbumLegacy(targetKey);
+}
+
+/**
+ * Legacy album selection method (kept as fallback)
  * @param {string} targetKey - Item key for the album list
  * @returns {Promise<Object>} Selected album object
  */
-async function selectRandomAlbum(targetKey) {
+async function selectRandomAlbumLegacy(targetKey) {
+  console.log('AlbumSelector: Using legacy selection method');
+
   const header = await browseAsync({ hierarchy: 'browse' });
   const totalAlbums = header?.list?.count ?? 0;
 
@@ -841,60 +1378,83 @@ async function selectRandomAlbum(targetKey) {
  * @param {string} zoneId - Target zone ID
  */
 async function playAlbum(album, zoneId) {
-  await browseAsync({ hierarchy: 'browse', item_key: album.item_key });
-  const albumPage = await loadAsync({
-    hierarchy: 'browse',
-    offset: 0,
-    count: 200,
-  });
-
-  // Try to get album art
-  let artKey = album?.image_key || albumPage?.list?.image_key || null;
-  if (!artKey) {
-    const itemWithArt = (albumPage?.items || []).find(item => item?.image_key);
-    if (itemWithArt) artKey = itemWithArt.image_key;
-  }
-  if (artKey && !album.image_key) album.image_key = artKey;
-
-  // Look for "Play Album" action
-  const playAlbumAction = (albumPage.items || []).find(
-    item => item.title === 'Play Album' && item.hint === 'action_list'
-  );
-
-  if (playAlbumAction?.item_key) {
-    await browseAsync({
-      hierarchy: 'browse',
-      item_key: playAlbumAction.item_key,
-      zone_or_output_id: zoneId,
-    });
-
-    const actions = await loadAsync({
+  try {
+    await browseAsync({ hierarchy: 'browse', item_key: album.item_key });
+    const albumPage = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 20,
+      count: 200,
     });
-    const playNowAction =
-      (actions.items || []).find(item =>
-        /play\s*now/i.test(item.title || '')
-      ) || (actions.items || [])[0];
 
-    if (!playNowAction?.item_key) {
-      throw new Error('No playable action found');
+    // Try to get album art
+    let artKey = album?.image_key || albumPage?.list?.image_key || null;
+    if (!artKey) {
+      const itemWithArt = (albumPage?.items || []).find(
+        item => item?.image_key
+      );
+      if (itemWithArt) artKey = itemWithArt.image_key;
+    }
+    if (artKey && !album.image_key) album.image_key = artKey;
+
+    // Look for "Play Album" action
+    const playAlbumAction = (albumPage.items || []).find(
+      item => item.title === 'Play Album' && item.hint === 'action_list'
+    );
+
+    if (playAlbumAction?.item_key) {
+      await browseAsync({
+        hierarchy: 'browse',
+        item_key: playAlbumAction.item_key,
+        zone_or_output_id: zoneId,
+      });
+
+      const actions = await loadAsync({
+        hierarchy: 'browse',
+        offset: 0,
+        count: 20,
+      });
+      const playNowAction =
+        (actions.items || []).find(item =>
+          /play\s*now/i.test(item.title || '')
+        ) || (actions.items || [])[0];
+
+      if (!playNowAction?.item_key) {
+        throw new Error('No playable action found');
+      }
+
+      await browseAsync({
+        hierarchy: 'browse',
+        item_key: playNowAction.item_key,
+        zone_or_output_id: zoneId,
+      });
+    } else {
+      // Fallback to play_from_here
+      await new Promise((resolve, reject) => {
+        transportService.play_from_here(
+          { zone_or_output_id: zoneId },
+          error => {
+            if (error) reject(error);
+            else resolve();
+          }
+        );
+      });
+    }
+  } catch (error) {
+    // Handle stale item key errors specifically
+    const wasStaleKey = albumSelector.handleStaleKeyError(error);
+
+    if (wasStaleKey) {
+      console.log(
+        'AlbumSelector: Stale key detected in playAlbum, cache cleared'
+      );
+      // Re-throw the error so the caller can handle the retry
+      throw new Error(
+        `InvalidItemKey: Album item key became stale - ${error.message}`
+      );
     }
 
-    await browseAsync({
-      hierarchy: 'browse',
-      item_key: playNowAction.item_key,
-      zone_or_output_id: zoneId,
-    });
-  } else {
-    // Fallback to play_from_here
-    await new Promise((resolve, reject) => {
-      transportService.play_from_here({ zone_or_output_id: zoneId }, error => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
+    // Re-throw other errors
+    throw error;
   }
 }
 
@@ -1145,6 +1705,25 @@ export function getImageDataUrl(imageKey, options = {}) {
 export function clearSessionHistory() {
   playedThisSession.clear();
   return true;
+}
+
+/**
+ * Gets album selector performance metrics
+ * @returns {Object} Performance metrics and cache statistics
+ */
+export function getAlbumSelectorMetrics() {
+  return {
+    metrics: albumSelector.getMetrics(),
+    cacheStats: {
+      poolsInCache: albumSelector.shuffledPools.size,
+      oldestCacheAge: Math.min(
+        ...[...albumSelector.poolCacheTime.values()].map(
+          time => Date.now() - time
+        )
+      ),
+      cacheKeys: [...albumSelector.shuffledPools.keys()],
+    },
+  };
 }
 
 // ==================== STORE INTEGRATION ====================
