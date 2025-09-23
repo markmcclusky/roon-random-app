@@ -26,7 +26,7 @@ A desktop application for discovering music through intelligent random album sel
 ### 📱 Modern Interface
 
 - **Clean Design**: Adaptive light/dark theme based on system preferences
-- **Activity Feed**: Visual history of recently played albums from the app with replay functionality
+- **Activity Feed**: Visual history of recently played albums from the app with replay functionality, persists across sessions
 - **Responsive Layout**: Three-column grid optimizing space for different content types
 
 ### ⌨️ Keyboard Shortcuts
