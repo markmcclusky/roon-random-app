@@ -8,8 +8,14 @@
 
 import { ipcMain } from 'electron';
 import * as RoonService from './roonService.js';
+import { randomUUID } from 'crypto';
 
 // ==================== CONSTANTS ====================
+
+// Activity persistence constants
+const ACTIVITY_STORAGE_VERSION = 1;
+const MAX_ACTIVITY_ITEMS = 100; // Keep more items in storage than UI shows
+const ACTIVITY_CLEANUP_INTERVAL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 const IPC_CHANNELS = {
   // State and configuration
@@ -34,6 +40,11 @@ const IPC_CHANNELS = {
   GET_IMAGE: 'roon:getImage',
   TRANSPORT_CONTROL: 'roon:transport:control',
   CHANGE_VOLUME: 'roon:changeVolume',
+
+  // Activity persistence
+  GET_ACTIVITY: 'roon:getActivity',
+  ADD_ACTIVITY: 'roon:addActivity',
+  CLEAR_ACTIVITY: 'roon:clearActivity',
 };
 
 // ==================== STATE & CONFIGURATION HANDLERS ====================
@@ -325,6 +336,186 @@ function registerMediaHandlers(store) {
   });
 }
 
+// ==================== ACTIVITY MANAGEMENT ====================
+
+/**
+ * Activity management helper functions
+ */
+const ActivityManager = {
+  /**
+   * Gets the current activity data structure from store
+   * @param {Object} store - Electron store instance
+   * @returns {Object} Activity data with items and metadata
+   */
+  getActivityData(store) {
+    const defaultData = {
+      activity: [],
+      activityMeta: {
+        version: ACTIVITY_STORAGE_VERSION,
+        lastCleanup: Date.now(),
+      },
+    };
+
+    const stored = store.get('activityData');
+    if (!stored || typeof stored !== 'object') {
+      return defaultData;
+    }
+
+    // Ensure data structure is valid
+    return {
+      activity: Array.isArray(stored.activity) ? stored.activity : [],
+      activityMeta: {
+        version: stored.activityMeta?.version || ACTIVITY_STORAGE_VERSION,
+        lastCleanup: stored.activityMeta?.lastCleanup || Date.now(),
+      },
+    };
+  },
+
+  /**
+   * Saves activity data to store
+   * @param {Object} store - Electron store instance
+   * @param {Object} activityData - Activity data to save
+   */
+  saveActivityData(store, activityData) {
+    store.set('activityData', activityData);
+  },
+
+  /**
+   * Validates an activity item
+   * @param {Object} item - Activity item to validate
+   * @returns {boolean} Whether the item is valid
+   */
+  isValidActivityItem(item) {
+    return (
+      item &&
+      typeof item === 'object' &&
+      typeof item.id === 'string' &&
+      typeof item.title === 'string' &&
+      typeof item.subtitle === 'string' &&
+      typeof item.timestamp === 'number' &&
+      item.timestamp > 0
+    );
+  },
+
+  /**
+   * Cleans up old activity items
+   * @param {Array} activities - Array of activity items
+   * @returns {Array} Cleaned array
+   */
+  cleanupOldActivities(activities) {
+    const now = Date.now();
+    const cutoffTime = now - ACTIVITY_CLEANUP_INTERVAL;
+
+    // Remove items older than cutoff time, but keep at least the most recent items
+    const filtered = activities.filter(item => item.timestamp > cutoffTime);
+
+    // If we have too many items, keep only the most recent ones
+    if (filtered.length > MAX_ACTIVITY_ITEMS) {
+      return filtered
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, MAX_ACTIVITY_ITEMS);
+    }
+
+    return filtered.sort((a, b) => b.timestamp - a.timestamp);
+  },
+};
+
+/**
+ * Registers activity persistence handlers
+ * @param {Object} store - Electron store instance
+ */
+function registerActivityHandlers(store) {
+  /**
+   * Gets all activity items (for UI display)
+   * @returns {Array} Array of activity items
+   */
+  ipcMain.handle(IPC_CHANNELS.GET_ACTIVITY, () => {
+    try {
+      const data = ActivityManager.getActivityData(store);
+
+      // Perform cleanup if needed
+      const now = Date.now();
+      const timeSinceLastCleanup = now - data.activityMeta.lastCleanup;
+
+      if (timeSinceLastCleanup > ACTIVITY_CLEANUP_INTERVAL) {
+        data.activity = ActivityManager.cleanupOldActivities(data.activity);
+        data.activityMeta.lastCleanup = now;
+        ActivityManager.saveActivityData(store, data);
+      }
+
+      return data.activity;
+    } catch (error) {
+      console.error('Failed to get activity:', error);
+      return [];
+    }
+  });
+
+  /**
+   * Adds a new activity item
+   * @param {Object} activityItem - Activity item to add
+   * @returns {Object} Success result
+   */
+  ipcMain.handle(IPC_CHANNELS.ADD_ACTIVITY, (_event, activityItem) => {
+    try {
+      // Validate the activity item
+      if (!ActivityManager.isValidActivityItem(activityItem)) {
+        throw new Error('Invalid activity item structure');
+      }
+
+      const data = ActivityManager.getActivityData(store);
+
+      // Add ID if not present
+      if (!activityItem.id) {
+        activityItem.id = randomUUID();
+      }
+
+      // Add timestamp if not present
+      if (!activityItem.timestamp) {
+        activityItem.timestamp = Date.now();
+      }
+
+      // Remove any existing item with the same key (deduplication)
+      if (activityItem.key) {
+        data.activity = data.activity.filter(
+          item => item.key !== activityItem.key
+        );
+      }
+
+      // Add the new item at the beginning
+      data.activity.unshift(activityItem);
+
+      // Clean up if needed
+      data.activity = ActivityManager.cleanupOldActivities(data.activity);
+
+      // Save to store
+      ActivityManager.saveActivityData(store, data);
+
+      return { success: true, id: activityItem.id };
+    } catch (error) {
+      console.error('Failed to add activity:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Clears all activity items
+   * @returns {Object} Success result
+   */
+  ipcMain.handle(IPC_CHANNELS.CLEAR_ACTIVITY, () => {
+    try {
+      const data = ActivityManager.getActivityData(store);
+      data.activity = [];
+      data.activityMeta.lastCleanup = Date.now();
+      ActivityManager.saveActivityData(store, data);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to clear activity:', error);
+      throw error;
+    }
+  });
+}
+
 // ==================== PUBLIC API ====================
 
 /**
@@ -348,6 +539,7 @@ export function registerIpcHandlers(store, mainWindow) {
   registerZoneHandlers(store, mainWindow); // Updated to pass mainWindow
   registerMusicHandlers();
   registerMediaHandlers(store);
+  registerActivityHandlers(store);
 
   console.log('All IPC handlers registered successfully');
 }
