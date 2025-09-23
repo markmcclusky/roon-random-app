@@ -389,11 +389,11 @@ const ActivityManager = {
     return (
       item &&
       typeof item === 'object' &&
-      typeof item.id === 'string' &&
+      (typeof item.id === 'string' || item.id === null) && // Allow null id (will be generated)
       typeof item.title === 'string' &&
       typeof item.subtitle === 'string' &&
-      typeof item.timestamp === 'number' &&
-      item.timestamp > 0
+      (typeof item.timestamp === 'number' || typeof item.timestamp === 'undefined') && // Allow missing timestamp
+      (item.timestamp === undefined || item.timestamp > 0)
     );
   },
 
