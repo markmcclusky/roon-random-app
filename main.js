@@ -33,6 +33,14 @@ const STORE_DEFAULTS = {
   token: null, // Roon authentication token
   lastZoneId: null, // Last selected output zone
   filters: { genres: [] }, // Genre filter settings
+  activityData: {
+    // Activity persistence data structure
+    activity: [],
+    activityMeta: {
+      version: 1,
+      lastCleanup: Date.now(),
+    },
+  },
 };
 
 // Security configuration for renderer process

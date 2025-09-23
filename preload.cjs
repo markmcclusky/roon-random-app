@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('roon', {
     ipcRenderer.invoke('roon:transport:control', action),
   changeVolume: value => ipcRenderer.invoke('roon:changeVolume', value),
 
+  // Activity persistence
+  getActivity: () => ipcRenderer.invoke('roon:getActivity'),
+  addActivity: activityItem => ipcRenderer.invoke('roon:addActivity', activityItem),
+  clearActivity: () => ipcRenderer.invoke('roon:clearActivity'),
+
   onEvent: callback => {
     if (typeof callback !== 'function') return;
     ipcRenderer.on('roon:event', (_event, payload) => callback(payload));
