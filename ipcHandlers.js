@@ -392,7 +392,8 @@ const ActivityManager = {
       (typeof item.id === 'string' || item.id === null) && // Allow null id (will be generated)
       typeof item.title === 'string' &&
       typeof item.subtitle === 'string' &&
-      (typeof item.timestamp === 'number' || typeof item.timestamp === 'undefined') && // Allow missing timestamp
+      (typeof item.timestamp === 'number' ||
+        typeof item.timestamp === 'undefined') && // Allow missing timestamp
       (item.timestamp === undefined || item.timestamp > 0)
     );
   },
