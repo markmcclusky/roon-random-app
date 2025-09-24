@@ -371,6 +371,20 @@
       });
     }, []);
 
+    // ==================== ACTIVITY FUNCTIONS ====================
+
+    /**
+     * Clears all activity items from both UI and persistent storage
+     */
+    async function clearActivity() {
+      try {
+        await window.roon.clearActivity();
+        console.log('[UI] Cleared persistent activity');
+      } catch (error) {
+        console.error('Failed to clear persistent activity:', error);
+      }
+    }
+
     // Return public API
     return {
       // State
@@ -389,6 +403,7 @@
       playRandomAlbumByArtist,
       transportControl,
       changeVolume,
+      clearActivity, // NEW
     };
   }
 
@@ -1250,12 +1265,49 @@
       setSubgenresCache,
     });
 
+    // ==================== ACTIVITY HELPER FUNCTIONS ====================
+
+    /**
+     * Handles clearing the activity list
+     */
+    async function handleClearActivity() {
+      try {
+        await roon.clearActivity();
+        setActivity([]);
+        console.log('[UI] Activity cleared');
+      } catch (error) {
+        console.error('Failed to clear activity:', error);
+      }
+    }
+
     // ==================== RENDER ACTIVITY CARD ====================
 
     const activityCard = e(
       'div',
       { className: 'card activity-card' },
-      e('h2', null, 'Activity'),
+      // Header with clear button
+      e(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0,
+          },
+        },
+        e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Activity'),
+        e(
+          'button',
+          {
+            className: 'btn-link',
+            onClick: handleClearActivity,
+            disabled: activity.length === 0,
+            style: { transform: 'translateY(-4px)' },
+          },
+          'Clear'
+        )
+      ),
       e(
         'div',
         { className: 'activity' },
