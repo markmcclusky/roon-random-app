@@ -67,6 +67,20 @@
     return [album || '', artist || ''].join('||');
   }
 
+  /**
+   * Formats seconds into MM:SS or M:SS time format
+   * @param {number} seconds - Time in seconds
+   * @returns {string} Formatted time string
+   */
+  function formatTime(seconds) {
+    if (!seconds || seconds < 0) return '0:00';
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
   // ==================== ICON COMPONENTS ====================
 
   /**
@@ -670,6 +684,9 @@
       artist: null,
       album: null,
       art: null,
+      seek_position: null,
+      length: null,
+      lastUpdate: null, // Timestamp for progress interpolation
     });
 
     // Activity feed state
@@ -684,6 +701,7 @@
     // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
     const [expandedGenres, setExpandedGenres] = useState(new Set());
     const [subgenresCache, setSubgenresCache] = useState(new Map());
+
 
     // Get current zone info
     const currentZone = roon.zones.find(
@@ -708,6 +726,9 @@
                 artist: metadata.artist, // Keep full artist for display
                 album: metadata.album,
                 art: dataUrl,
+                seek_position: metadata.seek_position,
+                length: metadata.length,
+                lastUpdate: Date.now(),
               });
             }
           });
@@ -719,12 +740,32 @@
               artist: metadata.artist, // Keep full artist for display
               album: metadata.album,
               art: previous.art,
+              seek_position: metadata.seek_position,
+              length: metadata.length,
+              lastUpdate: Date.now(),
             };
           });
         }
       }
 
       window.roon.onEvent(handleNowPlayingEvent);
+    }, [roon.state.lastZoneId]);
+
+    // ==================== SEEK POSITION EVENT HANDLER ====================
+
+    useEffect(() => {
+      function handleSeekPositionEvent(payload) {
+        if (payload.type !== 'seekPosition') return;
+        if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
+
+        // Update only the seek position in nowPlaying state
+        setNowPlaying(previous => ({
+          ...previous,
+          seek_position: payload.seek_position,
+        }));
+      }
+
+      window.roon.onEvent(handleSeekPositionEvent);
     }, [roon.state.lastZoneId]);
 
     // ==================== ACTIVITY PERSISTENCE ====================
@@ -787,6 +828,7 @@
         setLocalVolume(null);
       }
     }, [currentZone?.volume?.value]);
+
 
     // ==================== KEYBOARD SHORTCUTS ====================
 
@@ -1140,7 +1182,7 @@
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                fontSize: 15,
+                fontSize: 16,
                 lineHeight: 1.12,
                 overflowWrap: 'anywhere',
                 color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
@@ -1152,6 +1194,36 @@
             primaryArtist || 'Unknown Artist'
           )
         ),
+
+        // Progress bar - only show if we have length data
+        nowPlaying.length
+          ? e(
+              'div',
+              { className: 'progress-container' },
+              e(
+                'div',
+                { className: 'progress-time' },
+                formatTime(nowPlaying.seek_position)
+              ),
+              e(
+                'div',
+                { className: 'progress-bar' },
+                e('div', {
+                  className: 'progress-fill',
+                  style: {
+                    width: nowPlaying.seek_position && nowPlaying.length
+                      ? `${(nowPlaying.seek_position / nowPlaying.length) * 100}%`
+                      : '0%'
+                  }
+                })
+              ),
+              e(
+                'div',
+                { className: 'progress-time' },
+                formatTime(nowPlaying.length)
+              )
+            )
+          : null,
 
         // Transport controls
         e(

@@ -234,6 +234,39 @@
         border-radius: 2px;
       }
 
+      /* Progress bar styling */
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .progress-time {
+        font-size: 12px;
+        color: var(--muted);
+        width: 42px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+
+      .progress-bar {
+        flex-grow: 1;
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: #6b7280;
+        width: 0%;
+        transition: width 0.1s linear;
+        border-radius: 2px;
+      }
+
       /* Cards that need scrollable content */
       .activity-card {
         overflow: hidden;
@@ -257,10 +290,16 @@
 
       .title {
         font-weight: 600;
+        font-size: 15px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
       }
 
       .time {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--muted);
       }
 
@@ -462,8 +501,8 @@
       }
 
       .thumb {
-        width: 48px;
-        height: 48px;
+        width: 72px;
+        height: 72px;
         object-fit: cover;
         background: var(--border);
         flex-shrink: 0;
