@@ -267,6 +267,40 @@
         border-radius: 2px;
       }
 
+      /* Volume slider - Webkit only styling for Electron */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--border);
+        cursor: pointer;
+        height: 4px;
+        border-radius: 2px;
+        outline: none;
+      }
+
+      input[type="range"]::-webkit-slider-track {
+        background: var(--border);
+        height: 4px;
+        border-radius: 2px;
+        -webkit-appearance: none;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 12px;
+        width: 12px;
+        border-radius: 50%;
+        background: #6b7280;
+        cursor: pointer;
+        border: none;
+        transition: background-color 0.15s ease-in-out;
+      }
+
+      input[type="range"]::-webkit-slider-thumb:hover {
+        background: #4b5563;
+      }
+
       /* Cards that need scrollable content */
       .activity-card {
         overflow: hidden;

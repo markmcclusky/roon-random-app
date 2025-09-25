@@ -385,6 +385,32 @@
       });
     }, []);
 
+    // ==================== ACTIVITY FUNCTIONS ====================
+
+    /**
+     * Clears all activity items from both UI and persistent storage
+     */
+    async function clearActivity() {
+      try {
+        await window.roon.clearActivity();
+        console.log('[UI] Cleared persistent activity');
+      } catch (error) {
+        console.error('Failed to clear persistent activity:', error);
+      }
+    }
+
+    /**
+     * Toggles mute state for the current zone's output
+     */
+    async function muteToggle() {
+      try {
+        await window.roon.muteToggle();
+        console.log('[UI] Mute toggle requested');
+      } catch (error) {
+        console.error('Failed to toggle mute:', error);
+      }
+    }
+
     // Return public API
     return {
       // State
@@ -403,6 +429,8 @@
       playRandomAlbumByArtist,
       transportControl,
       changeVolume,
+      muteToggle, // NEW
+      clearActivity, // NEW
     };
   }
 
@@ -702,7 +730,6 @@
     const [expandedGenres, setExpandedGenres] = useState(new Set());
     const [subgenresCache, setSubgenresCache] = useState(new Map());
 
-
     // Get current zone info
     const currentZone = roon.zones.find(
       zone => zone.id === roon.state.lastZoneId
@@ -828,7 +855,6 @@
         setLocalVolume(null);
       }
     }, [currentZone?.volume?.value]);
-
 
     // ==================== KEYBOARD SHORTCUTS ====================
 
@@ -1176,7 +1202,7 @@
               disabled: roon.busy || !primaryArtist,
               onClick: handleMoreFromArtist,
               title: primaryArtist
-                ? `Find more albums by ${primaryArtist}`
+                ? `Play a different album from ${primaryArtist}`
                 : 'No artist available',
               style: {
                 background: 'none',
@@ -1211,10 +1237,11 @@
                 e('div', {
                   className: 'progress-fill',
                   style: {
-                    width: nowPlaying.seek_position && nowPlaying.length
-                      ? `${(nowPlaying.seek_position / nowPlaying.length) * 100}%`
-                      : '0%'
-                  }
+                    width:
+                      nowPlaying.seek_position && nowPlaying.length
+                        ? `${(nowPlaying.seek_position / nowPlaying.length) * 100}%`
+                        : '0%',
+                  },
                 })
               ),
               e(
@@ -1267,29 +1294,54 @@
               {
                 style: {
                   display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
+                  gap: '0px',
                   width: '100%',
                 },
               },
+              // Volume/mute icon
+              e(
+                'button',
+                {
+                  className: 'btn-icon',
+                  onClick: () => roon.muteToggle(),
+                  style: {
+                    padding: 0,
+                    background: 'none',
+                    border: 'none',
+                  },
+                },
+                e('img', {
+                  src: currentZone.volume.is_muted
+                    ? './images/mute-100.png'
+                    : './images/volume-100.png',
+                  alt: currentZone.volume.is_muted ? 'Unmute' : 'Mute',
+                  style: {
+                    width: '20px',
+                    height: '20px',
+                    transition: 'opacity 0.15s ease-in-out',
+                  },
+                })
+              ),
+              // Volume slider
               e('input', {
                 type: 'range',
                 min: currentZone.volume.min,
                 max: currentZone.volume.max,
                 step: currentZone.volume.step,
                 value:
-                  localVolume !== null
-                    ? localVolume
-                    : currentZone.volume.value,
+                  localVolume !== null ? localVolume : currentZone.volume.value,
                 onInput: event => setLocalVolume(event.target.value),
                 onChange: event => roon.changeVolume(event.target.value),
                 style: {
-                  width: '300px',
+                  width: '210px', // 75% of 280px
                   transform: 'translateY(2px)', // Visual alignment with transport buttons
+                  background: `linear-gradient(to right, #6b7280 0%, #6b7280 ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) 100%)`,
                 },
               })
             )
-          : null,
-
+          : null
       )
     );
 
@@ -1306,12 +1358,49 @@
       setSubgenresCache,
     });
 
+    // ==================== ACTIVITY HELPER FUNCTIONS ====================
+
+    /**
+     * Handles clearing the activity list
+     */
+    async function handleClearActivity() {
+      try {
+        await roon.clearActivity();
+        setActivity([]);
+        console.log('[UI] Activity cleared');
+      } catch (error) {
+        console.error('Failed to clear activity:', error);
+      }
+    }
+
     // ==================== RENDER ACTIVITY CARD ====================
 
     const activityCard = e(
       'div',
       { className: 'card activity-card' },
-      e('h2', null, 'Activity'),
+      // Header with clear button
+      e(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0,
+          },
+        },
+        e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Activity'),
+        e(
+          'button',
+          {
+            className: 'btn-link',
+            onClick: handleClearActivity,
+            disabled: activity.length === 0,
+            style: { transform: 'translateY(-4px)' },
+          },
+          'Clear'
+        )
+      ),
       e(
         'div',
         { className: 'activity' },
