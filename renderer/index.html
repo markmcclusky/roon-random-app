@@ -212,6 +212,95 @@
         min-height: 0; /* Allows card content to scroll */
       }
 
+      /* Fixed width for Now Playing card to prevent layout shifts */
+      .now-playing-card {
+        width: 420px;
+        flex-shrink: 0;
+      }
+
+      /* Clickable artist name link */
+      .artist-link:not(:disabled):hover {
+        opacity: 0.7;
+        text-decoration: underline;
+      }
+
+      .artist-link:disabled {
+        opacity: 0.6;
+      }
+
+      .artist-link:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      /* Progress bar styling */
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .progress-time {
+        font-size: 12px;
+        color: var(--muted);
+        width: 42px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+
+      .progress-bar {
+        flex-grow: 1;
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: #6b7280;
+        width: 0%;
+        transition: width 0.1s linear;
+        border-radius: 2px;
+      }
+
+      /* Volume slider - Webkit only styling for Electron */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--border);
+        cursor: pointer;
+        height: 4px;
+        border-radius: 2px;
+        outline: none;
+      }
+
+      input[type="range"]::-webkit-slider-track {
+        background: var(--border);
+        height: 4px;
+        border-radius: 2px;
+        -webkit-appearance: none;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 12px;
+        width: 12px;
+        border-radius: 50%;
+        background: #6b7280;
+        cursor: pointer;
+        border: none;
+        transition: background-color 0.15s ease-in-out;
+      }
+
+      input[type="range"]::-webkit-slider-thumb:hover {
+        background: #4b5563;
+      }
+
       /* Cards that need scrollable content */
       .activity-card {
         overflow: hidden;
@@ -235,10 +324,16 @@
 
       .title {
         font-weight: 600;
+        font-size: 15px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
       }
 
       .time {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--muted);
       }
 
@@ -246,8 +341,9 @@
 
       .np {
         display: flex;
-        gap: 20px;
-        align-items: flex-start;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
       }
 
       .np-left {
@@ -255,19 +351,22 @@
         flex-direction: column;
         align-items: center;
         flex-shrink: 0;
+        width: 100%;
       }
 
       .np-details {
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
-        flex-grow: 1;
-        gap: 8px; /* Spacing between track info and controls */
+        align-items: center;
+        text-align: center;
+        width: 100%;
+        gap: 16px;
       }
 
       .cover {
-        width: 256px;
-        height: 256px;
+        width: 384px;
+        height: 384px;
         object-fit: cover;
         box-shadow: var(--shadow);
         background: var(--border); /* Fallback when no image */
@@ -276,24 +375,24 @@
       /* ==================== TRANSPORT CONTROLS ==================== */
 
       .controls-row {
-        display: grid;
-        grid-template-columns: auto 1fr;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 24px;
-        min-height: 40px;
+        gap: 16px;
+        width: 100%;
       }
 
       .transport-controls {
         display: flex;
         align-items: center;
-        gap: 12px;
-        justify-self: start; /* Keep transport controls left-aligned */
+        gap: 16px;
+        justify-content: center;
       }
 
       .volume-area {
-        justify-self: stretch; /* Volume area takes remaining space */
-        min-width: 140px; /* Force minimum width even when empty */
-        min-height: 24px; /* Force minimum height */
+        width: 100%;
+        max-width: 300px;
+        min-height: 24px;
       }
 
       .btn-icon {
@@ -436,8 +535,8 @@
       }
 
       .thumb {
-        width: 48px;
-        height: 48px;
+        width: 72px;
+        height: 72px;
         object-fit: cover;
         background: var(--border);
         flex-shrink: 0;

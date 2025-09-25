@@ -195,6 +195,8 @@ export function getZoneNowPlaying(zoneId) {
     artist,
     album,
     image_key: nowPlaying?.image_key || null,
+    seek_position: nowPlaying?.seek_position || null,
+    length: nowPlaying?.length || null,
   };
 }
 
@@ -291,6 +293,23 @@ function handleZoneUpdates(response, data) {
       const zonesById = new Map(zonesRaw.map(z => [z.zone_id, z]));
       data.zones_changed.forEach(zone => zonesById.set(zone.zone_id, zone));
       zonesRaw = Array.from(zonesById.values());
+    }
+
+    // Handle seek position changes
+    if (Array.isArray(data?.zones_seek_changed)) {
+      const selectedZoneId = store.get('lastZoneId');
+
+      data.zones_seek_changed.forEach(seekUpdate => {
+        if (seekUpdate.zone_id === selectedZoneId) {
+          // Emit seek position update for the selected zone
+          emitEvent({
+            type: 'seekPosition',
+            zoneId: seekUpdate.zone_id,
+            seek_position: seekUpdate.seek_position,
+            queue_time_remaining: seekUpdate.queue_time_remaining,
+          });
+        }
+      });
     }
   }
 

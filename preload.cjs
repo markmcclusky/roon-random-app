@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('roon', {
   transportControl: action =>
     ipcRenderer.invoke('roon:transport:control', action),
   changeVolume: value => ipcRenderer.invoke('roon:changeVolume', value),
+  muteToggle: () => ipcRenderer.invoke('roon:muteToggle'),
 
   // Activity persistence
   getActivity: () => ipcRenderer.invoke('roon:getActivity'),

@@ -67,6 +67,20 @@
     return [album || '', artist || ''].join('||');
   }
 
+  /**
+   * Formats seconds into MM:SS or M:SS time format
+   * @param {number} seconds - Time in seconds
+   * @returns {string} Formatted time string
+   */
+  function formatTime(seconds) {
+    if (!seconds || seconds < 0) return '0:00';
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
   // ==================== ICON COMPONENTS ====================
 
   /**
@@ -385,6 +399,19 @@
       }
     }
 
+    /**
+     * Toggles mute state for the current zone's output
+     */
+    async function muteToggle() {
+      try {
+        await window.roon.muteToggle();
+        console.log('[UI] Mute toggle requested');
+      } catch (error) {
+        console.error('Failed to toggle mute:', error);
+      }
+    }
+
+
     // Return public API
     return {
       // State
@@ -403,6 +430,7 @@
       playRandomAlbumByArtist,
       transportControl,
       changeVolume,
+      muteToggle, // NEW
       clearActivity, // NEW
     };
   }
@@ -685,6 +713,9 @@
       artist: null,
       album: null,
       art: null,
+      seek_position: null,
+      length: null,
+      lastUpdate: null, // Timestamp for progress interpolation
     });
 
     // Activity feed state
@@ -723,6 +754,9 @@
                 artist: metadata.artist, // Keep full artist for display
                 album: metadata.album,
                 art: dataUrl,
+                seek_position: metadata.seek_position,
+                length: metadata.length,
+                lastUpdate: Date.now(),
               });
             }
           });
@@ -734,12 +768,32 @@
               artist: metadata.artist, // Keep full artist for display
               album: metadata.album,
               art: previous.art,
+              seek_position: metadata.seek_position,
+              length: metadata.length,
+              lastUpdate: Date.now(),
             };
           });
         }
       }
 
       window.roon.onEvent(handleNowPlayingEvent);
+    }, [roon.state.lastZoneId]);
+
+    // ==================== SEEK POSITION EVENT HANDLER ====================
+
+    useEffect(() => {
+      function handleSeekPositionEvent(payload) {
+        if (payload.type !== 'seekPosition') return;
+        if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
+
+        // Update only the seek position in nowPlaying state
+        setNowPlaying(previous => ({
+          ...previous,
+          seek_position: payload.seek_position,
+        }));
+      }
+
+      window.roon.onEvent(handleSeekPositionEvent);
     }, [roon.state.lastZoneId]);
 
     // ==================== ACTIVITY PERSISTENCE ====================
@@ -1104,151 +1158,191 @@
 
     const nowPlayingCard = e(
       'div',
-      { className: 'card' },
+      { className: 'card now-playing-card' },
       e('h2', null, 'Now Playing'),
       e(
         'div',
         { className: 'np' },
-        // Left side: Album art and More from Artist button
+        // Album art
+        nowPlaying.art
+          ? e('img', {
+              className: 'cover',
+              src: nowPlaying.art,
+              alt: 'Album art',
+            })
+          : e('div', { className: 'cover' }),
+
+        // Track information - DISPLAY full artist but USE primary for functionality
         e(
           'div',
-          { className: 'np-left' },
-          nowPlaying.art
-            ? e('img', {
-                className: 'cover',
-                src: nowPlaying.art,
-                alt: 'Album art',
-              })
-            : e('div', { className: 'cover' }),
-
+          {
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: '8px',
+            },
+          },
+          e(
+            'div',
+            {
+              style: {
+                fontSize: 20,
+                fontWeight: 700,
+                lineHeight: 1.12,
+                overflowWrap: 'anywhere',
+              },
+            },
+            nowPlaying.song || '—'
+          ),
           e(
             'button',
             {
-              className: 'btn btn-primary',
-              disabled: roon.busy || !primaryArtist, // FIXED: Use primary artist for enable/disable
+              className: 'artist-link',
+              disabled: roon.busy || !primaryArtist,
               onClick: handleMoreFromArtist,
-              style: {
-                width: '100%',
-                marginTop: '16px',
-                textAlign: 'center',
-                justifyContent: 'center',
-              },
               title: primaryArtist
-                ? `Find more albums by ${primaryArtist}`
-                : 'No artist available', // Helpful tooltip
+                ? `Play a different album from ${primaryArtist}`
+                : 'No artist available',
+              style: {
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: 16,
+                lineHeight: 1.12,
+                overflowWrap: 'anywhere',
+                color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
+                cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
+                textDecoration: 'none',
+                transition: 'color 0.15s ease-in-out',
+              },
             },
-            'More from Artist'
+            primaryArtist || 'Unknown Artist'
           )
         ),
 
-        // Right side: Track info and controls
-        e(
-          'div',
-          { className: 'np-details' },
-          // Track information - DISPLAY full artist but USE primary for functionality
-          e(
-            'div',
-            null,
-            e(
+        // Progress bar - only show if we have length data
+        nowPlaying.length
+          ? e(
               'div',
-              {
-                style: {
-                  fontSize: 20,
-                  fontWeight: 700,
-                  marginBottom: 6,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.song || '—'
-            ),
-            e(
-              'div',
-              {
-                style: {
-                  fontWeight: 500,
-                  fontSize: 15,
-                  marginBottom: 6,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.album || ''
-            ),
-            e(
-              'div',
-              {
-                className: 'muted',
-                style: {
-                  fontSize: 15,
-                  marginBottom: 12,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.artist || ''
-            ) // Show full artist name for user
-          ),
-
-          e(
-            'div',
-            { className: 'controls-row' },
-            e(
-              'div',
-              { className: 'transport-controls' },
+              { className: 'progress-container' },
               e(
-                'button',
-                {
-                  className: 'btn-icon',
-                  onClick: () => roon.transportControl('previous'),
-                },
-                e('img', { src: './images/previous-100.png', alt: 'Previous' })
+                'div',
+                { className: 'progress-time' },
+                formatTime(nowPlaying.seek_position)
               ),
               e(
-                'button',
-                {
-                  className: 'btn-icon btn-playpause',
-                  onClick: () => roon.transportControl('playpause'),
-                },
-                e('img', {
-                  src: isPlaying
-                    ? './images/pause-100.png'
-                    : './images/play-100.png',
-                  alt: 'Play/Pause',
+                'div',
+                { className: 'progress-bar' },
+                e('div', {
+                  className: 'progress-fill',
+                  style: {
+                    width:
+                      nowPlaying.seek_position && nowPlaying.length
+                        ? `${(nowPlaying.seek_position / nowPlaying.length) * 100}%`
+                        : '0%',
+                  },
                 })
               ),
               e(
+                'div',
+                { className: 'progress-time' },
+                formatTime(nowPlaying.length)
+              )
+            )
+          : null,
+
+        // Transport controls
+        e(
+          'div',
+          { className: 'transport-controls' },
+          e(
+            'button',
+            {
+              className: 'btn-icon',
+              onClick: () => roon.transportControl('previous'),
+            },
+            e('img', { src: './images/previous-100.png', alt: 'Previous' })
+          ),
+          e(
+            'button',
+            {
+              className: 'btn-icon btn-playpause',
+              onClick: () => roon.transportControl('playpause'),
+            },
+            e('img', {
+              src: isPlaying
+                ? './images/pause-100.png'
+                : './images/play-100.png',
+              alt: 'Play/Pause',
+            })
+          ),
+          e(
+            'button',
+            {
+              className: 'btn-icon',
+              onClick: () => roon.transportControl('next'),
+            },
+            e('img', { src: './images/next-100.png', alt: 'Next' })
+          )
+        ),
+
+        // Volume area - centered under transport controls
+        hasVolumeControl
+          ? e(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0px',
+                  width: '100%',
+                },
+              },
+              // Volume/mute icon
+              e(
                 'button',
                 {
                   className: 'btn-icon',
-                  onClick: () => roon.transportControl('next'),
+                  onClick: () => roon.muteToggle(),
+                  style: {
+                    padding: 0,
+                    background: 'none',
+                    border: 'none',
+                  },
                 },
-                e('img', { src: './images/next-100.png', alt: 'Next' })
-              )
-            ),
-
-            // Volume area - always present but conditionally populated
-            e(
-              'div',
-              { className: 'volume-area' },
-              hasVolumeControl
-                ? e('input', {
-                    className: 'volume-slider',
-                    type: 'range',
-                    min: currentZone.volume.min,
-                    max: currentZone.volume.max,
-                    step: currentZone.volume.step,
-                    value:
-                      localVolume !== null
-                        ? localVolume
-                        : currentZone.volume.value,
-                    onInput: event => setLocalVolume(event.target.value),
-                    onChange: event => roon.changeVolume(event.target.value),
-                  })
-                : null
+                e('img', {
+                  src: currentZone.volume.is_muted
+                    ? './images/mute-100.png'
+                    : './images/volume-100.png',
+                  alt: currentZone.volume.is_muted ? 'Unmute' : 'Mute',
+                  style: {
+                    width: '20px',
+                    height: '20px',
+                    transition: 'opacity 0.15s ease-in-out',
+                  },
+                })
+              ),
+              // Volume slider
+              e('input', {
+                type: 'range',
+                min: currentZone.volume.min,
+                max: currentZone.volume.max,
+                step: currentZone.volume.step,
+                value:
+                  localVolume !== null ? localVolume : currentZone.volume.value,
+                onInput: event => setLocalVolume(event.target.value),
+                onChange: event => roon.changeVolume(event.target.value),
+                style: {
+                  width: '210px', // 75% of 280px
+                  transform: 'translateY(2px)', // Visual alignment with transport buttons
+                  background: `linear-gradient(to right, #6b7280 0%, #6b7280 ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) 100%)`,
+                },
+              })
             )
-          )
-        )
+          : null
       )
     );
 

@@ -40,6 +40,7 @@ const IPC_CHANNELS = {
   GET_IMAGE: 'roon:getImage',
   TRANSPORT_CONTROL: 'roon:transport:control',
   CHANGE_VOLUME: 'roon:changeVolume',
+  MUTE_TOGGLE: 'roon:muteToggle',
 
   // Activity persistence
   GET_ACTIVITY: 'roon:getActivity',
@@ -330,6 +331,42 @@ function registerMediaHandlers(store) {
           reject(new Error(`Volume change failed: ${error}`));
         } else {
           resolve({ success: true });
+        }
+      });
+    });
+  });
+
+  /**
+   * Toggles mute state of the currently selected zone's output
+   * @returns {Promise<Object>} Success result
+   */
+  ipcMain.handle(IPC_CHANNELS.MUTE_TOGGLE, async () => {
+    return new Promise((resolve, reject) => {
+      const selectedZoneId = store.get('lastZoneId');
+      const zone = RoonService.getRawZones().find(
+        z => z.zone_id === selectedZoneId
+      );
+      const output = zone?.outputs?.[0];
+
+      if (!output?.volume) {
+        return reject(new Error('Output not found or has no volume control'));
+      }
+
+      const transport = RoonService.getTransport();
+      if (!transport) {
+        return reject(new Error('Transport service not available'));
+      }
+
+      // Toggle mute: if currently muted, unmute; if not muted, mute
+      const action = output.volume.is_muted ? 'unmute' : 'mute';
+
+      transport.mute(output, action, error => {
+        if (error) {
+          console.error('Mute toggle failed:', error);
+          reject(new Error(`Mute toggle failed: ${error}`));
+        } else {
+          console.log(`Zone ${selectedZoneId} ${action}d successfully`);
+          resolve({ success: true, action });
         }
       });
     });
