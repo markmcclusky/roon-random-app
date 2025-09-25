@@ -17,7 +17,7 @@
 
   // ==================== CONSTANTS ====================
 
-  const ACTIVITY_HISTORY_LIMIT = 12; // Maximum items in activity feed
+  const ACTIVITY_HISTORY_LIMIT = 50; // Maximum items in activity feed
 
   // ==================== UTILITY FUNCTIONS ====================
 
