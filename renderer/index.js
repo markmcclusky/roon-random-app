@@ -411,7 +411,6 @@
       }
     }
 
-
     // Return public API
     return {
       // State
