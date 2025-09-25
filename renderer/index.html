@@ -212,6 +212,28 @@
         min-height: 0; /* Allows card content to scroll */
       }
 
+      /* Fixed width for Now Playing card to prevent layout shifts */
+      .now-playing-card {
+        width: 420px;
+        flex-shrink: 0;
+      }
+
+      /* Clickable artist name link */
+      .artist-link:not(:disabled):hover {
+        opacity: 0.7;
+        text-decoration: underline;
+      }
+
+      .artist-link:disabled {
+        opacity: 0.6;
+      }
+
+      .artist-link:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
       /* Cards that need scrollable content */
       .activity-card {
         overflow: hidden;
@@ -246,8 +268,9 @@
 
       .np {
         display: flex;
-        gap: 20px;
-        align-items: flex-start;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
       }
 
       .np-left {
@@ -255,19 +278,22 @@
         flex-direction: column;
         align-items: center;
         flex-shrink: 0;
+        width: 100%;
       }
 
       .np-details {
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
-        flex-grow: 1;
-        gap: 8px; /* Spacing between track info and controls */
+        align-items: center;
+        text-align: center;
+        width: 100%;
+        gap: 16px;
       }
 
       .cover {
-        width: 256px;
-        height: 256px;
+        width: 384px;
+        height: 384px;
         object-fit: cover;
         box-shadow: var(--shadow);
         background: var(--border); /* Fallback when no image */
@@ -276,24 +302,24 @@
       /* ==================== TRANSPORT CONTROLS ==================== */
 
       .controls-row {
-        display: grid;
-        grid-template-columns: auto 1fr;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 24px;
-        min-height: 40px;
+        gap: 16px;
+        width: 100%;
       }
 
       .transport-controls {
         display: flex;
         align-items: center;
-        gap: 12px;
-        justify-self: start; /* Keep transport controls left-aligned */
+        gap: 16px;
+        justify-content: center;
       }
 
       .volume-area {
-        justify-self: stretch; /* Volume area takes remaining space */
-        min-width: 140px; /* Force minimum width even when empty */
-        min-height: 24px; /* Force minimum height */
+        width: 100%;
+        max-width: 300px;
+        min-height: 24px;
       }
 
       .btn-icon {

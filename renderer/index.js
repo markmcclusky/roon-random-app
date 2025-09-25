@@ -1089,151 +1089,135 @@
 
     const nowPlayingCard = e(
       'div',
-      { className: 'card' },
+      { className: 'card now-playing-card' },
       e('h2', null, 'Now Playing'),
       e(
         'div',
         { className: 'np' },
-        // Left side: Album art and More from Artist button
+        // Album art
+        nowPlaying.art
+          ? e('img', {
+              className: 'cover',
+              src: nowPlaying.art,
+              alt: 'Album art',
+            })
+          : e('div', { className: 'cover' }),
+
+        // Track information - DISPLAY full artist but USE primary for functionality
         e(
           'div',
-          { className: 'np-left' },
-          nowPlaying.art
-            ? e('img', {
-                className: 'cover',
-                src: nowPlaying.art,
-                alt: 'Album art',
-              })
-            : e('div', { className: 'cover' }),
-
+          {
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: '8px',
+            },
+          },
+          e(
+            'div',
+            {
+              style: {
+                fontSize: 20,
+                fontWeight: 700,
+                lineHeight: 1.12,
+                overflowWrap: 'anywhere',
+              },
+            },
+            nowPlaying.song || '—'
+          ),
           e(
             'button',
             {
-              className: 'btn btn-primary',
-              disabled: roon.busy || !primaryArtist, // FIXED: Use primary artist for enable/disable
+              className: 'artist-link',
+              disabled: roon.busy || !primaryArtist,
               onClick: handleMoreFromArtist,
-              style: {
-                width: '100%',
-                marginTop: '16px',
-                textAlign: 'center',
-                justifyContent: 'center',
-              },
               title: primaryArtist
                 ? `Find more albums by ${primaryArtist}`
-                : 'No artist available', // Helpful tooltip
+                : 'No artist available',
+              style: {
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: 15,
+                lineHeight: 1.12,
+                overflowWrap: 'anywhere',
+                color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
+                cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
+                textDecoration: 'none',
+                transition: 'color 0.15s ease-in-out',
+              },
             },
-            'More from Artist'
+            primaryArtist || 'Unknown Artist'
           )
         ),
 
-        // Right side: Track info and controls
+        // Transport controls
         e(
           'div',
-          { className: 'np-details' },
-          // Track information - DISPLAY full artist but USE primary for functionality
+          { className: 'transport-controls' },
           e(
-            'div',
-            null,
-            e(
-              'div',
-              {
-                style: {
-                  fontSize: 20,
-                  fontWeight: 700,
-                  marginBottom: 6,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.song || '—'
-            ),
-            e(
-              'div',
-              {
-                style: {
-                  fontWeight: 500,
-                  fontSize: 15,
-                  marginBottom: 6,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.album || ''
-            ),
-            e(
-              'div',
-              {
-                className: 'muted',
-                style: {
-                  fontSize: 15,
-                  marginBottom: 12,
-                  lineHeight: 1.12,
-                  overflowWrap: 'anywhere',
-                },
-              },
-              nowPlaying.artist || ''
-            ) // Show full artist name for user
+            'button',
+            {
+              className: 'btn-icon',
+              onClick: () => roon.transportControl('previous'),
+            },
+            e('img', { src: './images/previous-100.png', alt: 'Previous' })
           ),
-
           e(
-            'div',
-            { className: 'controls-row' },
-            e(
-              'div',
-              { className: 'transport-controls' },
-              e(
-                'button',
-                {
-                  className: 'btn-icon',
-                  onClick: () => roon.transportControl('previous'),
-                },
-                e('img', { src: './images/previous-100.png', alt: 'Previous' })
-              ),
-              e(
-                'button',
-                {
-                  className: 'btn-icon btn-playpause',
-                  onClick: () => roon.transportControl('playpause'),
-                },
-                e('img', {
-                  src: isPlaying
-                    ? './images/pause-100.png'
-                    : './images/play-100.png',
-                  alt: 'Play/Pause',
-                })
-              ),
-              e(
-                'button',
-                {
-                  className: 'btn-icon',
-                  onClick: () => roon.transportControl('next'),
-                },
-                e('img', { src: './images/next-100.png', alt: 'Next' })
-              )
-            ),
-
-            // Volume area - always present but conditionally populated
-            e(
-              'div',
-              { className: 'volume-area' },
-              hasVolumeControl
-                ? e('input', {
-                    className: 'volume-slider',
-                    type: 'range',
-                    min: currentZone.volume.min,
-                    max: currentZone.volume.max,
-                    step: currentZone.volume.step,
-                    value:
-                      localVolume !== null
-                        ? localVolume
-                        : currentZone.volume.value,
-                    onInput: event => setLocalVolume(event.target.value),
-                    onChange: event => roon.changeVolume(event.target.value),
-                  })
-                : null
-            )
+            'button',
+            {
+              className: 'btn-icon btn-playpause',
+              onClick: () => roon.transportControl('playpause'),
+            },
+            e('img', {
+              src: isPlaying
+                ? './images/pause-100.png'
+                : './images/play-100.png',
+              alt: 'Play/Pause',
+            })
+          ),
+          e(
+            'button',
+            {
+              className: 'btn-icon',
+              onClick: () => roon.transportControl('next'),
+            },
+            e('img', { src: './images/next-100.png', alt: 'Next' })
           )
-        )
+        ),
+
+        // Volume area - centered under transport controls
+        hasVolumeControl
+          ? e(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  justifyContent: 'center',
+                  width: '100%',
+                },
+              },
+              e('input', {
+                type: 'range',
+                min: currentZone.volume.min,
+                max: currentZone.volume.max,
+                step: currentZone.volume.step,
+                value:
+                  localVolume !== null
+                    ? localVolume
+                    : currentZone.volume.value,
+                onInput: event => setLocalVolume(event.target.value),
+                onChange: event => roon.changeVolume(event.target.value),
+                style: {
+                  width: '300px',
+                  transform: 'translateY(2px)', // Visual alignment with transport buttons
+                },
+              })
+            )
+          : null,
+
       )
     );
 
