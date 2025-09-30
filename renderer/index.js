@@ -42,7 +42,7 @@
   }
 
   /**
-   * Formats a timestamp as relative time (e.g., "5m ago", "2h ago")
+   * Formats a timestamp as relative time (e.g., "5m ago", "2h ago", "3d ago")
    * @param {number} timestamp - Unix timestamp in milliseconds
    * @returns {string} Formatted relative time string
    */
@@ -54,7 +54,10 @@
     if (minutes < 60) return `${minutes}m ago`;
 
     const hours = Math.round(minutes / 60);
-    return `${hours}h ago`;
+    if (hours < 24) return `${hours}h ago`;
+
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
   }
 
   /**
