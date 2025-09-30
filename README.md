@@ -13,9 +13,9 @@ A desktop application for discovering music through intelligent random album sel
 
 ### 🎵 Now Playing Integration
 
-- **Real-time Display**: Shows current track, album, artist, and cover art
+- **Real-time Display**: Shows current track, album, artist, cover art, and track progress
 - **Transport Controls**: Play, pause, next, previous with keyboard shortcuts
-- **Volume Control**: Integrated volume slider for supported zones
+- **Volume Control**: Integrated volume slider for supported zones with mute function
 
 ### 🎨 Artist Discovery
 
@@ -116,7 +116,7 @@ The app uses Roon's official API and requires authorization:
 
 ### Artist Exploration
 
-- Use **"More from Artist"** button to explore the current artist's discography
+- Click on artist name in Now Playing to explore the current artist's discography
 - Smart session tracking ensures you hear different albums before repeats
 - Automatically cycles through the artist's entire catalog
 
@@ -125,6 +125,7 @@ The app uses Roon's official API and requires authorization:
 - Visual history of recently played albums
 - Click any album to replay it instantly
 - Timestamps show when each album was played
+- Feed persists across sessions
 
 ## Architecture
 
