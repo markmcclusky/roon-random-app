@@ -22,6 +22,27 @@
   // ==================== UTILITY FUNCTIONS ====================
 
   /**
+   * Converts straight quotes and apostrophes to smart/curly equivalents
+   * for better typography
+   * @param {string} text - Text to convert
+   * @returns {string} Text with smart quotes and apostrophes
+   */
+  function smartQuotes(text) {
+    if (!text || typeof text !== 'string') {
+      return text;
+    }
+
+    return text
+      // Replace straight apostrophes with right single quotation marks
+      .replace(/'/g, '\u2019')
+      // Replace straight quotes with smart quotes
+      // Opening quote: quote at start or after whitespace
+      .replace(/(^|[\s\(\[\{])"/g, '$1\u201C')
+      // Closing quote: all remaining quotes
+      .replace(/"/g, '\u201D');
+  }
+
+  /**
    * Extracts the primary artist name from a compound artist string
    * Roon often sends artist names like "Lou Donaldson / Leon Spencer" or
    * "Miles Davis / John Coltrane / Bill Evans" for collaborations.
@@ -545,7 +566,7 @@
 
     return e(
       'div',
-      { className: 'card activity-card' },
+      { className: 'card activity-card genre-filter-card' },
       // Header with reload button
       e(
         'div',
@@ -1190,37 +1211,62 @@
             'div',
             {
               style: {
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 700,
                 lineHeight: 1.12,
                 overflowWrap: 'anywhere',
               },
             },
-            nowPlaying.song || '—'
+            nowPlaying.song ? smartQuotes(nowPlaying.song) : '—'
           ),
           e(
-            'button',
+            'div',
             {
-              className: 'artist-link',
-              disabled: roon.busy || !primaryArtist,
-              onClick: handleMoreFromArtist,
-              title: primaryArtist
-                ? `Play a different album from ${primaryArtist}`
-                : 'No artist available',
               style: {
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                fontSize: 16,
+                fontSize: 18,
                 lineHeight: 1.12,
                 overflowWrap: 'anywhere',
-                color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
-                cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
-                textDecoration: 'none',
-                transition: 'color 0.15s ease-in-out',
+                textAlign: 'center',
+                paddingLeft: '16px',
+                paddingRight: '16px',
               },
             },
-            primaryArtist || 'Unknown Artist'
+            e(
+              'button',
+              {
+                className: 'artist-link',
+                disabled: roon.busy || !primaryArtist,
+                onClick: handleMoreFromArtist,
+                title: primaryArtist
+                  ? `Play a different album from ${primaryArtist}`
+                  : 'No artist available',
+                style: {
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: 'inherit',
+                  lineHeight: 'inherit',
+                  overflowWrap: 'anywhere',
+                  color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
+                  cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
+                  textDecoration: 'none',
+                  transition: 'color 0.15s ease-in-out',
+                },
+              },
+              primaryArtist ? smartQuotes(primaryArtist) : 'Unknown Artist'
+            ),
+            nowPlaying.album
+              ? e(
+                  'span',
+                  {
+                    style: {
+                      color: 'var(--muted)',
+                    },
+                  },
+                  ' • ',
+                  smartQuotes(nowPlaying.album)
+                )
+              : null
           )
         ),
 
@@ -1433,8 +1479,8 @@
                 e(
                   'div',
                   null,
-                  e('div', { className: 'title' }, item.title),
-                  e('div', { className: 'muted' }, item.subtitle || ''),
+                  e('div', { className: 'title' }, smartQuotes(item.title)),
+                  e('div', { className: 'muted' }, smartQuotes(item.subtitle) || ''),
                   e('div', { className: 'time' }, formatRelativeTime(item.t))
                 )
               );

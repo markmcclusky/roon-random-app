@@ -6,15 +6,24 @@
     <!-- Security: Content Security Policy for Electron app -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; 
-                 script-src 'self' https://unpkg.com; 
-                 style-src 'self' 'unsafe-inline'; 
-                 img-src 'self' data:; 
+      content="default-src 'self';
+                 script-src 'self' https://unpkg.com;
+                 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                 font-src https://fonts.gstatic.com;
+                 img-src 'self' data:;
                  connect-src 'self';"
     />
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roon Random Album</title>
+
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
 
     <style>
       /* ==================== CSS CUSTOM PROPERTIES ==================== */
@@ -59,15 +68,17 @@
       body {
         background: var(--bg);
         color: var(--fg);
-        font:
-          14px/1.45 -apple-system,
-          BlinkMacSystemFont,
-          'Inter',
-          'Segoe UI',
-          Roboto,
-          Helvetica,
-          Arial,
-          sans-serif;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          Roboto, Helvetica, Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      /* Apply font to all buttons, inputs, and interactive elements */
+      button,
+      select,
+      input {
+        font-family: inherit;
       }
 
       #root {
@@ -80,7 +91,7 @@
 
       .wrap {
         max-width: 1400px;
-        margin: 28px auto 40px;
+        margin: 12px auto 40px;
         padding: 0 20px;
         display: flex;
         flex-direction: column;
@@ -108,9 +119,9 @@
       /* Three-column main content grid */
       .grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
-        padding: 20px;
+        grid-template-columns: auto auto 1fr;
+        gap: 12px;
+        padding: 12px;
         flex-grow: 1;
         min-height: 0; /* Allows grid items to shrink */
       }
@@ -214,7 +225,7 @@
 
       /* Fixed width for Now Playing card to prevent layout shifts */
       .now-playing-card {
-        width: 420px;
+        width: 500px;
         flex-shrink: 0;
       }
 
@@ -306,6 +317,12 @@
         overflow: hidden;
       }
 
+      /* Fixed width for Genre Filter card */
+      .genre-filter-card {
+        width: 250px;
+        flex-shrink: 0;
+      }
+
       /* ==================== TYPOGRAPHY ==================== */
 
       h1 {
@@ -365,8 +382,8 @@
       }
 
       .cover {
-        width: 384px;
-        height: 384px;
+        width: 470px;
+        height: 470px;
         object-fit: cover;
         box-shadow: var(--shadow);
         background: var(--border); /* Fallback when no image */
@@ -468,8 +485,8 @@
       .toggle-switch {
         position: relative;
         display: inline-block;
-        width: 44px;
-        height: 24px;
+        width: 36px;
+        height: 20px;
         background-color: #ccc;
         border-radius: 34px;
         transition: background-color 0.2s;
@@ -479,8 +496,8 @@
       .toggle-switch::before {
         content: '';
         position: absolute;
-        height: 18px;
-        width: 18px;
+        height: 14px;
+        width: 14px;
         left: 3px;
         bottom: 3px;
         background-color: white;
@@ -493,7 +510,7 @@
       }
 
       .toggle-item[data-active='true'] .toggle-switch::before {
-        transform: translateX(20px);
+        transform: translateX(16px);
       }
 
       /* ==================== ACTIVITY FEED COMPONENTS ==================== */
