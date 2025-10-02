@@ -32,14 +32,16 @@
       return text;
     }
 
-    return text
-      // Replace straight apostrophes with right single quotation marks
-      .replace(/'/g, '\u2019')
-      // Replace straight quotes with smart quotes
-      // Opening quote: quote at start or after whitespace
-      .replace(/(^|[\s\(\[\{])"/g, '$1\u201C')
-      // Closing quote: all remaining quotes
-      .replace(/"/g, '\u201D');
+    return (
+      text
+        // Replace straight apostrophes with right single quotation marks
+        .replace(/'/g, '\u2019')
+        // Replace straight quotes with smart quotes
+        // Opening quote: quote at start or after whitespace
+        .replace(/(^|[\s()[\]{])"/g, '$1\u201C')
+        // Closing quote: all remaining quotes
+        .replace(/"/g, '\u201D')
+    );
   }
 
   /**
@@ -1247,7 +1249,8 @@
                   fontSize: 'inherit',
                   lineHeight: 'inherit',
                   overflowWrap: 'anywhere',
-                  color: primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
+                  color:
+                    primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
                   cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
                   textDecoration: 'none',
                   transition: 'color 0.15s ease-in-out',
@@ -1480,7 +1483,11 @@
                   'div',
                   null,
                   e('div', { className: 'title' }, smartQuotes(item.title)),
-                  e('div', { className: 'muted' }, smartQuotes(item.subtitle) || ''),
+                  e(
+                    'div',
+                    { className: 'muted' },
+                    smartQuotes(item.subtitle) || ''
+                  ),
                   e('div', { className: 'time' }, formatRelativeTime(item.t))
                 )
               );
