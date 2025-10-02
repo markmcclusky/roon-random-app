@@ -50,17 +50,22 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG_NAME=v$VERSION" >> $GITHUB_OUTPUT
-          # Update package.json version
-          npm version $VERSION --no-git-tag-version
         else
           VERSION=${GITHUB_REF_NAME#v}
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT  
-          echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
-          # Update package.json to match tag
-          npm version $VERSION --no-git-tag-version
         fi
+
+        # Normalize version to semver (add .0 if only two parts)
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          VERSION="${VERSION}.0"
+          echo "Normalized version to: $VERSION"
+        fi
+
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+
+        # Update package.json version
+        npm version $VERSION --no-git-tag-version
+
         echo "Building version: $VERSION"
     
     # Import Apple certificates for code signing
