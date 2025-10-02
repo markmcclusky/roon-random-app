@@ -2,10 +2,10 @@ name: Build and Release
 # Automated build, sign, and release workflow
 
 on:
-  # Trigger on version tags (e.g., v1.0.4)
+  # Trigger on version tags (e.g., v1.0.4, v1.3, etc.)
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
   
   # Allow manual triggering with version input
   workflow_dispatch:
