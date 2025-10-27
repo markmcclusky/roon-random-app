@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 // Application window configuration
 const WINDOW_CONFIG = {
   width: 1200,
-  height: 800,
+  height: 900,
   minWidth: 780,
   minHeight: 560,
   title: 'Roon Random Album',

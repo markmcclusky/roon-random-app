@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('roon', {
   getActivity: () => ipcRenderer.invoke('roon:getActivity'),
   addActivity: activityItem => ipcRenderer.invoke('roon:addActivity', activityItem),
   clearActivity: () => ipcRenderer.invoke('roon:clearActivity'),
+  removeActivity: itemId => ipcRenderer.invoke('roon:removeActivity', itemId),
 
   onEvent: callback => {
     if (typeof callback !== 'function') return;

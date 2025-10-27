@@ -426,6 +426,19 @@
     }
 
     /**
+     * Removes a single activity item by ID
+     * @param {string} itemId - ID of the activity item to remove
+     */
+    async function removeActivity(itemId) {
+      try {
+        await window.roon.removeActivity(itemId);
+        console.log('[UI] Removed activity item:', itemId);
+      } catch (error) {
+        console.error('Failed to remove activity item:', error);
+      }
+    }
+
+    /**
      * Toggles mute state for the current zone's output
      */
     async function muteToggle() {
@@ -457,6 +470,7 @@
       changeVolume,
       muteToggle, // NEW
       clearActivity, // NEW
+      removeActivity, // NEW
     };
   }
 
@@ -853,6 +867,7 @@
                 }
 
                 return {
+                  id: item.id, // Preserve ID for removal
                   title: item.title,
                   subtitle: item.subtitle,
                   art: artUrl,
@@ -995,7 +1010,12 @@
 
       try {
         // Save to persistent storage
-        await window.roon.addActivity(persistedActivityItem);
+        const result = await window.roon.addActivity(persistedActivityItem);
+
+        // Add the generated ID to the UI item
+        if (result && result.id) {
+          uiActivityItem.id = result.id;
+        }
 
         // Update UI state immediately
         setActivity(previousActivity =>
@@ -1006,7 +1026,7 @@
       } catch (error) {
         console.error('Failed to save activity item:', error);
 
-        // Still update UI even if persistence fails
+        // Still update UI even if persistence fails (without ID)
         setActivity(previousActivity =>
           [uiActivityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
         );
@@ -1425,6 +1445,27 @@
       }
     }
 
+    /**
+     * Handles removing a single activity item
+     * @param {Event} event - Click event (to stop propagation)
+     * @param {string} itemId - ID of the item to remove
+     */
+    async function handleRemoveActivity(event, itemId) {
+      // Stop propagation to prevent triggering the item click
+      event.stopPropagation();
+
+      try {
+        await roon.removeActivity(itemId);
+        // Update local state by filtering out the removed item
+        setActivity(prevActivity =>
+          prevActivity.filter(item => item.id !== itemId)
+        );
+        console.log('[UI] Activity item removed:', itemId);
+      } catch (error) {
+        console.error('Failed to remove activity item:', error);
+      }
+    }
+
     // ==================== RENDER ACTIVITY CARD ====================
 
     const activityCard = e(
@@ -1450,7 +1491,7 @@
             disabled: activity.length === 0,
             style: { transform: 'translateY(-4px)' },
           },
-          'Clear'
+          'Clear All'
         )
       ),
       e(
@@ -1470,6 +1511,7 @@
                     appearance: 'none',
                     textAlign: 'left',
                     cursor: item.title && item.subtitle ? 'pointer' : 'default',
+                    position: 'relative',
                   },
                 },
                 item.art
@@ -1481,7 +1523,7 @@
                   : e('div', { className: 'thumb' }),
                 e(
                   'div',
-                  null,
+                  { style: { flex: 1 } },
                   e('div', { className: 'title' }, smartQuotes(item.title)),
                   e(
                     'div',
@@ -1489,6 +1531,17 @@
                     smartQuotes(item.subtitle) || ''
                   ),
                   e('div', { className: 'time' }, formatRelativeTime(item.t))
+                ),
+                // Remove button
+                e(
+                  'button',
+                  {
+                    className: 'activity-remove-btn',
+                    onClick: event => handleRemoveActivity(event, item.id),
+                    title: 'Remove from activity',
+                    'aria-label': 'Remove from activity',
+                  },
+                  '×'
                 )
               );
             })

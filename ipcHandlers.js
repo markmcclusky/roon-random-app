@@ -46,6 +46,7 @@ const IPC_CHANNELS = {
   GET_ACTIVITY: 'roon:getActivity',
   ADD_ACTIVITY: 'roon:addActivity',
   CLEAR_ACTIVITY: 'roon:clearActivity',
+  REMOVE_ACTIVITY: 'roon:removeActivity',
 };
 
 // ==================== STATE & CONFIGURATION HANDLERS ====================
@@ -549,6 +550,38 @@ function registerActivityHandlers(store) {
       return { success: true };
     } catch (error) {
       console.error('Failed to clear activity:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Removes a single activity item by ID
+   * @param {string} itemId - ID of the activity item to remove
+   * @returns {Object} Success result
+   */
+  ipcMain.handle(IPC_CHANNELS.REMOVE_ACTIVITY, (_event, itemId) => {
+    try {
+      if (!itemId || typeof itemId !== 'string') {
+        throw new Error('Invalid item ID');
+      }
+
+      const data = ActivityManager.getActivityData(store);
+
+      // Filter out the item with the matching ID
+      const originalLength = data.activity.length;
+      data.activity = data.activity.filter(item => item.id !== itemId);
+
+      if (data.activity.length === originalLength) {
+        console.warn(`Activity item with ID ${itemId} not found`);
+        return { success: false, message: 'Item not found' };
+      }
+
+      // Save to store
+      ActivityManager.saveActivityData(store, data);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to remove activity item:', error);
       throw error;
     }
   });

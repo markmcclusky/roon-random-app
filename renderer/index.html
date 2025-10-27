@@ -314,13 +314,16 @@
 
       /* Cards that need scrollable content */
       .activity-card {
-        overflow: hidden;
+        overflow-y: auto;
+        padding-right: 8px; /* Reduce padding on right for scrollbar visibility */
       }
 
       /* Fixed width for Genre Filter card */
       .genre-filter-card {
         width: 250px;
         flex-shrink: 0;
+        overflow-y: auto;
+        padding-right: 8px; /* Reduce padding on right for scrollbar visibility */
       }
 
       /* ==================== TYPOGRAPHY ==================== */
@@ -457,9 +460,8 @@
 
       .genre-card-content {
         flex-grow: 1;
-        overflow-y: auto;
         min-height: 0;
-        padding-right: 10px; /* Space for scrollbar */
+        padding-right: 8px; /* Space between items and scrollbar */
       }
 
       .toggle-list {
@@ -516,12 +518,10 @@
       /* ==================== ACTIVITY FEED COMPONENTS ==================== */
 
       .activity {
-        flex-grow: 1;
-        overflow-y: auto;
-        min-height: 0;
         display: flex;
         flex-direction: column;
         gap: 8px;
+        padding-right: 8px; /* Space between items and scrollbar */
       }
 
       .row {
@@ -557,6 +557,35 @@
         object-fit: cover;
         background: var(--border);
         flex-shrink: 0;
+      }
+
+      /* Activity item remove button */
+      .activity-remove-btn {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        flex-shrink: 0;
+        padding: 0;
+      }
+
+      .activity-remove-btn:hover {
+        background: #ef4444;
+        border-color: #dc2626;
+        color: white;
+      }
+
+      .activity-remove-btn:active {
+        transform: scale(0.95);
       }
 
       /* ==================== LOADING ANIMATIONS ==================== */
