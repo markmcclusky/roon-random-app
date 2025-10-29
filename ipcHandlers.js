@@ -97,6 +97,48 @@ const Validators = {
   isObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   },
+
+  /**
+   * Validates an array contains genre objects or strings
+   * Genre objects have: title, item_key, albumCount, isSubgenre
+   * @param {*} value - Value to validate
+   * @param {number} maxItems - Maximum allowed array size
+   * @returns {boolean} True if valid
+   */
+  isGenreArray(value, maxItems = MAX_GENRE_ARRAY_SIZE) {
+    if (!Array.isArray(value) || value.length > maxItems) {
+      return false;
+    }
+
+    // Allow empty array
+    if (value.length === 0) {
+      return true;
+    }
+
+    // Check if all items are strings (backwards compatibility)
+    const allStrings = value.every(
+      item => typeof item === 'string' && item.length > 0
+    );
+    if (allStrings) {
+      return true;
+    }
+
+    // Check if all items are valid genre objects
+    const allGenreObjects = value.every(
+      item =>
+        item &&
+        typeof item === 'object' &&
+        typeof item.title === 'string' &&
+        item.title.length > 0 &&
+        typeof item.item_key === 'string' &&
+        item.item_key.length > 0 &&
+        (typeof item.albumCount === 'number' ||
+          item.albumCount === undefined) &&
+        (typeof item.isSubgenre === 'boolean' || item.isSubgenre === undefined)
+    );
+
+    return allGenreObjects;
+  },
 };
 
 const IPC_CHANNELS = {
@@ -304,18 +346,14 @@ function registerMusicHandlers() {
 
   /**
    * Picks and plays a random album based on genre filters
-   * @param {Array} genres - Array of genre names to filter by
+   * @param {Array} genres - Array of genre objects or strings to filter by
    * @returns {Promise<Object>} Album information and playback result
    */
   ipcMain.handle(IPC_CHANNELS.PLAY_RANDOM_ALBUM, async (_event, genres) => {
-    // Validate genres array (can be empty array, but must be valid array of strings)
-    if (!Array.isArray(genres)) {
-      throw new Error('Invalid genres: must be an array');
-    }
-
-    if (genres.length > 0 && !Validators.isStringArray(genres)) {
+    // Validate genres array (can be empty, strings, or genre objects)
+    if (!Validators.isGenreArray(genres)) {
       throw new Error(
-        'Invalid genres: must be an array of strings with max 100 items'
+        'Invalid genres: must be an array of genre objects or strings with max 100 items'
       );
     }
 
