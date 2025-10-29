@@ -17,6 +17,88 @@ const ACTIVITY_STORAGE_VERSION = 1;
 const MAX_ACTIVITY_ITEMS = 100; // Keep more items in storage than UI shows
 const ACTIVITY_CLEANUP_INTERVAL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
+// Validation constants
+const MAX_STRING_LENGTH = 1000;
+const MAX_GENRE_ARRAY_SIZE = 100;
+const VALID_TRANSPORT_ACTIONS = [
+  'play',
+  'pause',
+  'playpause',
+  'stop',
+  'next',
+  'previous',
+];
+const MIN_VOLUME = 0;
+const MAX_VOLUME = 100;
+
+// ==================== VALIDATION UTILITIES ====================
+
+/**
+ * Input validation utilities for IPC handlers
+ * These prevent crashes and unexpected behavior from invalid data
+ */
+const Validators = {
+  /**
+   * Validates a string is non-empty and within length limits
+   * @param {*} value - Value to validate
+   * @param {number} maxLength - Maximum allowed length
+   * @returns {boolean} True if valid
+   */
+  isNonEmptyString(value, maxLength = MAX_STRING_LENGTH) {
+    return (
+      typeof value === 'string' &&
+      value.trim().length > 0 &&
+      value.length <= maxLength
+    );
+  },
+
+  /**
+   * Validates an array contains only strings
+   * @param {*} value - Value to validate
+   * @param {number} maxItems - Maximum allowed array size
+   * @returns {boolean} True if valid
+   */
+  isStringArray(value, maxItems = MAX_GENRE_ARRAY_SIZE) {
+    return (
+      Array.isArray(value) &&
+      value.length <= maxItems &&
+      value.every(item => typeof item === 'string' && item.length > 0)
+    );
+  },
+
+  /**
+   * Validates a transport action is in the allowed list
+   * @param {*} action - Action to validate
+   * @returns {boolean} True if valid
+   */
+  isValidTransportAction(action) {
+    return (
+      typeof action === 'string' && VALID_TRANSPORT_ACTIONS.includes(action)
+    );
+  },
+
+  /**
+   * Validates a volume value is a number within valid range
+   * @param {*} value - Volume value to validate
+   * @returns {boolean} True if valid
+   */
+  isValidVolume(value) {
+    const num = Number(value);
+    return (
+      !isNaN(num) && isFinite(num) && num >= MIN_VOLUME && num <= MAX_VOLUME
+    );
+  },
+
+  /**
+   * Validates an object has expected structure
+   * @param {*} value - Value to validate
+   * @returns {boolean} True if valid
+   */
+  isObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  },
+};
+
 const IPC_CHANNELS = {
   // State and configuration
   GET_STATE: 'roon:getState',
@@ -72,6 +154,11 @@ function registerStateHandlers(store, mainWindow) {
    * @param {string} zoneId - Zone identifier to select
    */
   ipcMain.handle(IPC_CHANNELS.SELECT_ZONE, (_event, zoneId) => {
+    // Validate zone ID
+    if (!Validators.isNonEmptyString(zoneId)) {
+      throw new Error('Invalid zone ID: must be a non-empty string');
+    }
+
     RoonService.setLastZone(zoneId);
 
     // Immediately get and emit now playing for the newly selected zone
@@ -99,6 +186,20 @@ function registerStateHandlers(store, mainWindow) {
    * @returns {Object} Updated filter settings
    */
   ipcMain.handle(IPC_CHANNELS.SET_FILTERS, (_event, filters) => {
+    // Validate filters object
+    if (!Validators.isObject(filters)) {
+      throw new Error('Invalid filters: must be an object');
+    }
+
+    // Validate genres array if present
+    if (filters.genres !== undefined) {
+      if (!Validators.isStringArray(filters.genres)) {
+        throw new Error(
+          'Invalid filters.genres: must be an array of strings with max 100 items'
+        );
+      }
+    }
+
     return RoonService.setFilters(filters);
   });
 }
@@ -186,6 +287,13 @@ function registerMusicHandlers() {
    * @returns {Promise<Array>} Array of subgenre objects with 10+ albums
    */
   ipcMain.handle(IPC_CHANNELS.GET_SUBGENRES, async (_event, genreTitle) => {
+    // Validate genre title
+    if (!Validators.isNonEmptyString(genreTitle, 500)) {
+      throw new Error(
+        'Invalid genre title: must be a non-empty string with max 500 characters'
+      );
+    }
+
     try {
       return await RoonService.getSubgenres(genreTitle);
     } catch (error) {
@@ -200,6 +308,17 @@ function registerMusicHandlers() {
    * @returns {Promise<Object>} Album information and playback result
    */
   ipcMain.handle(IPC_CHANNELS.PLAY_RANDOM_ALBUM, async (_event, genres) => {
+    // Validate genres array (can be empty array, but must be valid array of strings)
+    if (!Array.isArray(genres)) {
+      throw new Error('Invalid genres: must be an array');
+    }
+
+    if (genres.length > 0 && !Validators.isStringArray(genres)) {
+      throw new Error(
+        'Invalid genres: must be an array of strings with max 100 items'
+      );
+    }
+
     try {
       return await RoonService.pickRandomAlbumAndPlay(genres);
     } catch (error) {
@@ -217,6 +336,20 @@ function registerMusicHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.PLAY_ALBUM_BY_NAME,
     async (_event, albumTitle, artistName) => {
+      // Validate album title
+      if (!Validators.isNonEmptyString(albumTitle, 500)) {
+        throw new Error(
+          'Invalid album title: must be a non-empty string with max 500 characters'
+        );
+      }
+
+      // Validate artist name
+      if (!Validators.isNonEmptyString(artistName, 500)) {
+        throw new Error(
+          'Invalid artist name: must be a non-empty string with max 500 characters'
+        );
+      }
+
       try {
         return await RoonService.playAlbumByName(albumTitle, artistName);
       } catch (error) {
@@ -235,6 +368,24 @@ function registerMusicHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.PLAY_RANDOM_ALBUM_BY_ARTIST,
     async (_event, artistName, currentAlbum) => {
+      // Validate artist name
+      if (!Validators.isNonEmptyString(artistName, 500)) {
+        throw new Error(
+          'Invalid artist name: must be a non-empty string with max 500 characters'
+        );
+      }
+
+      // Validate current album (can be null or string)
+      if (
+        currentAlbum !== null &&
+        currentAlbum !== undefined &&
+        !Validators.isNonEmptyString(currentAlbum, 500)
+      ) {
+        throw new Error(
+          'Invalid current album: must be null or a non-empty string with max 500 characters'
+        );
+      }
+
       try {
         return await RoonService.playRandomAlbumByArtist(
           artistName,
@@ -262,6 +413,18 @@ function registerMediaHandlers(store) {
    * @returns {Promise<string|null>} Data URL or null if not found
    */
   ipcMain.handle(IPC_CHANNELS.GET_IMAGE, async (_event, imageKey, options) => {
+    // Validate image key
+    if (!Validators.isNonEmptyString(imageKey, 500)) {
+      console.error('Invalid image key: must be a non-empty string');
+      return null;
+    }
+
+    // Validate options if provided
+    if (options !== undefined && !Validators.isObject(options)) {
+      console.error('Invalid image options: must be an object');
+      return null;
+    }
+
     try {
       return await RoonService.getImageDataUrl(imageKey, options);
     } catch (error) {
@@ -276,6 +439,13 @@ function registerMediaHandlers(store) {
    * @returns {Promise<void>}
    */
   ipcMain.handle(IPC_CHANNELS.TRANSPORT_CONTROL, async (_event, action) => {
+    // Validate transport action
+    if (!Validators.isValidTransportAction(action)) {
+      throw new Error(
+        `Invalid transport action: must be one of ${VALID_TRANSPORT_ACTIONS.join(', ')}`
+      );
+    }
+
     return new Promise((resolve, reject) => {
       const selectedZoneId = store.get('lastZoneId');
       const zone = RoonService.getRawZones().find(
@@ -308,6 +478,13 @@ function registerMediaHandlers(store) {
    * @returns {Promise<Object>} Success result
    */
   ipcMain.handle(IPC_CHANNELS.CHANGE_VOLUME, async (_event, volumeValue) => {
+    // Validate volume value
+    if (!Validators.isValidVolume(volumeValue)) {
+      throw new Error(
+        `Invalid volume value: must be a number between ${MIN_VOLUME} and ${MAX_VOLUME}`
+      );
+    }
+
     return new Promise((resolve, reject) => {
       const selectedZoneId = store.get('lastZoneId');
       const zone = RoonService.getRawZones().find(
