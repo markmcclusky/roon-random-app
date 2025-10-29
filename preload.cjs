@@ -32,7 +32,14 @@ contextBridge.exposeInMainWorld('roon', {
   removeActivity: itemId => ipcRenderer.invoke('roon:removeActivity', itemId),
 
   onEvent: callback => {
-    if (typeof callback !== 'function') return;
-    ipcRenderer.on('roon:event', (_event, payload) => callback(payload));
+    if (typeof callback !== 'function') return () => {};
+
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('roon:event', handler);
+
+    // Return unsubscribe function for cleanup
+    return () => {
+      ipcRenderer.removeListener('roon:event', handler);
+    };
   },
 });
