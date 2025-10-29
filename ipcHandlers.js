@@ -100,7 +100,7 @@ const Validators = {
 
   /**
    * Validates an array contains genre objects or strings
-   * Genre objects have: title, item_key, albumCount, isSubgenre
+   * Genre objects have: title (required), albumCount, isSubgenre, expandable
    * @param {*} value - Value to validate
    * @param {number} maxItems - Maximum allowed array size
    * @returns {boolean} True if valid
@@ -124,17 +124,13 @@ const Validators = {
     }
 
     // Check if all items are valid genre objects
+    // Only title is required, other properties are optional
     const allGenreObjects = value.every(
       item =>
         item &&
         typeof item === 'object' &&
         typeof item.title === 'string' &&
-        item.title.length > 0 &&
-        typeof item.item_key === 'string' &&
-        item.item_key.length > 0 &&
-        (typeof item.albumCount === 'number' ||
-          item.albumCount === undefined) &&
-        (typeof item.isSubgenre === 'boolean' || item.isSubgenre === undefined)
+        item.title.length > 0
     );
 
     return allGenreObjects;
