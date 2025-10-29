@@ -571,7 +571,7 @@
       })();
 
       // Set up event listener for real-time updates
-      window.roon.onEvent(payload => {
+      const unsubscribe = window.roon.onEvent(payload => {
         if (!payload) return;
 
         if (payload.type === 'core') {
@@ -610,6 +610,11 @@
           }
         }
       });
+
+      // Cleanup: remove event listener when component unmounts
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     }, []);
 
     // ==================== ACTIVITY FUNCTIONS ====================
@@ -1016,7 +1021,12 @@
         }
       }
 
-      window.roon.onEvent(handleNowPlayingEvent);
+      const unsubscribe = window.roon.onEvent(handleNowPlayingEvent);
+
+      // Cleanup: remove event listener when zone changes or component unmounts
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     }, [roon.state.lastZoneId]);
 
     // ==================== SEEK POSITION EVENT HANDLER ====================
@@ -1033,7 +1043,12 @@
         }));
       }
 
-      window.roon.onEvent(handleSeekPositionEvent);
+      const unsubscribe = window.roon.onEvent(handleSeekPositionEvent);
+
+      // Cleanup: remove event listener when zone changes or component unmounts
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     }, [roon.state.lastZoneId]);
 
     // ==================== ACTIVITY PERSISTENCE ====================
