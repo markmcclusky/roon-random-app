@@ -24,6 +24,7 @@ const GENRE_CACHE_DURATION = 3600 * 1000; // 1 hour in milliseconds
 const MAX_RANDOM_ATTEMPTS = 50; // Maximum attempts to find unplayed album
 const BROWSE_PAGE_SIZE = 200; // Number of items to fetch per browse request
 const DEFAULT_IMAGE_SIZE = 512; // Default image dimensions
+const MAX_SESSION_HISTORY = 1000; // Maximum albums to remember in session history
 
 // Persisted state (token) storage — lives in a writable, stable location
 const ROON_DATA_DIR = app.getPath('userData'); // e.g. ~/Library/Application Support/Roon Random App
@@ -850,6 +851,15 @@ async function selectRandomAlbum(targetKey) {
   // Mark as played
   const albumKey = createAlbumKey(selectedAlbum.title, selectedAlbum.subtitle);
   playedThisSession.add(albumKey);
+
+  // Enforce session history size limit to prevent unbounded memory growth
+  if (playedThisSession.size > MAX_SESSION_HISTORY) {
+    const toRemove = playedThisSession.size - MAX_SESSION_HISTORY;
+    const iterator = playedThisSession.values();
+    for (let i = 0; i < toRemove; i++) {
+      playedThisSession.delete(iterator.next().value);
+    }
+  }
 
   return selectedAlbum;
 }
