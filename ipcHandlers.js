@@ -15,13 +15,14 @@ import {
   MIN_VOLUME,
   MAX_VOLUME,
 } from './validators.js';
+import {
+  isValidActivityItem,
+  cleanupOldActivities,
+  ACTIVITY_STORAGE_VERSION,
+  ACTIVITY_CLEANUP_INTERVAL,
+} from './activityHelpers.js';
 
 // ==================== CONSTANTS ====================
-
-// Activity persistence constants
-const ACTIVITY_STORAGE_VERSION = 1;
-const MAX_ACTIVITY_ITEMS = 100; // Keep more items in storage than UI shows
-const ACTIVITY_CLEANUP_INTERVAL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 const IPC_CHANNELS = {
   // State and configuration
@@ -515,45 +516,9 @@ const ActivityManager = {
     store.set('activityData', activityData);
   },
 
-  /**
-   * Validates an activity item
-   * @param {Object} item - Activity item to validate
-   * @returns {boolean} Whether the item is valid
-   */
-  isValidActivityItem(item) {
-    return (
-      item &&
-      typeof item === 'object' &&
-      (typeof item.id === 'string' || item.id === null) && // Allow null id (will be generated)
-      typeof item.title === 'string' &&
-      typeof item.subtitle === 'string' &&
-      (typeof item.timestamp === 'number' ||
-        typeof item.timestamp === 'undefined') && // Allow missing timestamp
-      (item.timestamp === undefined || item.timestamp > 0)
-    );
-  },
-
-  /**
-   * Cleans up old activity items
-   * @param {Array} activities - Array of activity items
-   * @returns {Array} Cleaned array
-   */
-  cleanupOldActivities(activities) {
-    const now = Date.now();
-    const cutoffTime = now - ACTIVITY_CLEANUP_INTERVAL;
-
-    // Remove items older than cutoff time, but keep at least the most recent items
-    const filtered = activities.filter(item => item.timestamp > cutoffTime);
-
-    // If we have too many items, keep only the most recent ones
-    if (filtered.length > MAX_ACTIVITY_ITEMS) {
-      return filtered
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, MAX_ACTIVITY_ITEMS);
-    }
-
-    return filtered.sort((a, b) => b.timestamp - a.timestamp);
-  },
+  // Delegate to imported helper functions
+  isValidActivityItem,
+  cleanupOldActivities,
 };
 
 /**
