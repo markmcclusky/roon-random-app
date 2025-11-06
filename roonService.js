@@ -18,6 +18,8 @@ import RoonApiBrowse from 'node-roon-api-browse';
 import RoonApiTransport from 'node-roon-api-transport';
 import RoonApiImage from 'node-roon-api-image';
 
+import { findItemCaseInsensitive, createAlbumKey } from './roonHelpers.js';
+
 // ==================== CONSTANTS ====================
 
 const GENRE_CACHE_DURATION = 3600 * 1000; // 1 hour in milliseconds
@@ -125,34 +127,6 @@ function loadAsync(options) {
       else resolve(result || {});
     });
   });
-}
-
-/**
- * Case-insensitive search for an item in a list
- * @param {Array} items - Items to search
- * @param {string} searchText - Text to find
- * @returns {Object|null} Found item or null
- */
-function findItemCaseInsensitive(items, searchText) {
-  const searchLower = String(searchText).toLowerCase();
-  return (
-    (items || []).find(
-      item => (item?.title || '').toLowerCase() === searchLower
-    ) ||
-    (items || []).find(item =>
-      (item?.title || '').toLowerCase().includes(searchLower)
-    )
-  );
-}
-
-/**
- * Creates a compound key for tracking played albums
- * @param {string} album - Album title
- * @param {string} artist - Artist name
- * @returns {string} Compound key
- */
-function createAlbumKey(album, artist) {
-  return `${album || ''}||${artist || ''}`;
 }
 
 // ==================== NOW PLAYING MANAGEMENT ====================
