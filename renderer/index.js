@@ -1361,23 +1361,6 @@
     const toolbar = e(
       'div',
       { className: 'toolbar' },
-      // Connection status
-      e(
-        'div',
-        { className: 'seg' },
-        e('span', { className: 'muted' }, 'Connected to core:'),
-        e(
-          'strong',
-          {
-            className: roon.state.paired ? 'status-yes' : 'status-no',
-          },
-          roon.state.paired ? 'Yes' : 'No'
-        ),
-        e('span', { className: 'muted' }, `(${roon.state.coreName || 'Core'})`)
-      ),
-
-      e('div', { className: 'divider' }),
-
       // Zone selector
       e(
         'div',
@@ -1397,6 +1380,27 @@
               return e('option', { key: zone.id, value: zone.id }, zone.name);
             })
         )
+      ),
+
+      e('div', { className: 'divider' }),
+
+      // Connection status
+      e(
+        'div',
+        { className: 'seg' },
+        e('span', { className: 'muted' }, 'Core:'),
+        e(
+          'span',
+          {
+            className: roon.state.paired ? 'status-yes' : 'status-no',
+            style: {
+              fontSize: '12px',
+              verticalAlign: 'baseline',
+            },
+          },
+          '●'
+        ),
+        e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
       ),
 
       e('div', { className: 'spacer' }),
