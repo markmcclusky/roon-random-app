@@ -1421,7 +1421,11 @@
 
     const nowPlayingCard = e(
       'div',
-      { className: 'card now-playing-card' },
+      {
+        className: 'card now-playing-card',
+        'data-has-art': nowPlaying.art ? 'true' : 'false',
+        style: nowPlaying.art ? { '--bg-image': `url(${nowPlaying.art})` } : {},
+      },
       e('h2', null, 'Now Playing'),
       e(
         'div',

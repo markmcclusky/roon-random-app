@@ -227,6 +227,38 @@
       .now-playing-card {
         width: 500px;
         flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+        background: var(--card); /* Fallback */
+      }
+
+      /* Blurred album art background for Now Playing card */
+      .now-playing-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: var(--bg-image);
+        background-size: cover;
+        background-position: center;
+        filter: blur(5px) brightness(1.8);
+        transform: scale(1.4); /* Zoomed in more on the background art */
+        z-index: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+      }
+
+      /* Show background when card has the data-has-art attribute */
+      .now-playing-card[data-has-art='true']::before {
+        opacity: 0.2;
+      }
+
+      /* Ensure content stays above the background */
+      .now-playing-card > * {
+        position: relative;
+        z-index: 1;
       }
 
       /* Clickable artist name link */
