@@ -1394,9 +1394,11 @@
               roon.selectZone(event.target.value);
             },
           },
-          roon.zones.map(zone => {
-            return e('option', { key: zone.id, value: zone.id }, zone.name);
-          })
+          roon.zones
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(zone => {
+              return e('option', { key: zone.id, value: zone.id }, zone.name);
+            })
         )
       ),
 
