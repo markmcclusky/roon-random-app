@@ -354,8 +354,6 @@
       .genre-filter-card {
         width: 250px;
         flex-shrink: 0;
-        overflow-y: auto;
-        padding-right: 8px; /* Reduce padding on right for scrollbar visibility */
       }
 
       /* ==================== TYPOGRAPHY ==================== */
@@ -493,58 +491,52 @@
       .genre-card-content {
         flex-grow: 1;
         min-height: 0;
+        overflow-y: auto;
         padding-right: 8px; /* Space between items and scrollbar */
       }
 
       .toggle-list {
         display: flex;
         flex-direction: column;
-        gap: 8px; /* Compact spacing */
+        gap: 4px; /* Compact spacing */
       }
 
       .toggle-item {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         cursor: pointer;
         user-select: none;
-        padding: 4px 0; /* Easier click targets */
+        padding: 6px 8px;
+        border-radius: 4px;
+        transition: background-color 0.15s ease-in-out;
+        color: var(--muted);
+      }
+
+      .toggle-item:hover:not([data-disabled='true']) {
+        background-color: rgba(0, 0, 0, 0.03);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .toggle-item:hover:not([data-disabled='true']) {
+          background-color: rgba(255, 255, 255, 0.05);
+        }
+      }
+
+      .toggle-item[data-active='true'] {
+        background-color: rgba(37, 99, 235, 0.1);
+        color: var(--fg);
+        font-weight: 600;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .toggle-item[data-active='true'] {
+          background-color: rgba(96, 165, 250, 0.15);
+        }
       }
 
       .toggle-item[data-disabled='true'] {
         opacity: 0.5;
         cursor: not-allowed;
-      }
-
-      .toggle-switch {
-        position: relative;
-        display: inline-block;
-        width: 36px;
-        height: 20px;
-        background-color: #ccc;
-        border-radius: 34px;
-        transition: background-color 0.2s;
-        flex-shrink: 0;
-      }
-
-      .toggle-switch::before {
-        content: '';
-        position: absolute;
-        height: 14px;
-        width: 14px;
-        left: 3px;
-        bottom: 3px;
-        background-color: white;
-        border-radius: 50%;
-        transition: transform 0.2s;
-      }
-
-      .toggle-item[data-active='true'] .toggle-switch {
-        background-color: var(--primary);
-      }
-
-      .toggle-item[data-active='true'] .toggle-switch::before {
-        transform: translateX(16px);
       }
 
       /* ==================== ACTIVITY FEED COMPONENTS ==================== */

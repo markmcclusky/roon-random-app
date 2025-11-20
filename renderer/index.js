@@ -875,9 +875,7 @@
                       },
                     },
                     `${genre.title} (${genre.albumCount})`
-                  ),
-
-                  e('div', { className: 'toggle-switch' })
+                  )
                 ),
               ];
 
@@ -906,8 +904,7 @@
                         'span',
                         null,
                         `${subgenre.title} (${subgenre.albumCount})`
-                      ),
-                      e('div', { className: 'toggle-switch' })
+                      )
                     )
                   );
                 });
