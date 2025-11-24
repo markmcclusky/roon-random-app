@@ -16,6 +16,7 @@ export const VALID_TRANSPORT_ACTIONS = [
 ];
 export const MIN_VOLUME = 0;
 export const MAX_VOLUME = 100;
+export const MIN_SEEK_POSITION = 0;
 
 /**
  * Input validation utilities for IPC handlers
@@ -76,6 +77,20 @@ export const Validators = {
     return (
       !isNaN(num) && isFinite(num) && num >= MIN_VOLUME && num <= MAX_VOLUME
     );
+  },
+
+  /**
+   * Validates a seek position is a non-negative number
+   * @param {*} value - Seek position value to validate
+   * @returns {boolean} True if valid
+   */
+  isValidSeekPosition(value) {
+    // Reject null, undefined, objects, and arrays
+    if (value === null || value === undefined || typeof value === 'object') {
+      return false;
+    }
+    const num = Number(value);
+    return !isNaN(num) && isFinite(num) && num >= MIN_SEEK_POSITION;
   },
 
   /**

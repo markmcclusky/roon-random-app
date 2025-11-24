@@ -1150,6 +1150,42 @@ export function clearSessionHistory() {
   return true;
 }
 
+// ==================== TRANSPORT CONTROLS ====================
+
+/**
+ * Seeks to a specific position in the currently playing track
+ * @param {string} zoneId - Zone identifier
+ * @param {number} seconds - Target position in seconds (absolute)
+ * @returns {Promise<void>}
+ */
+export function seekToPosition(zoneId, seconds) {
+  return new Promise((resolve, reject) => {
+    if (!transportService) {
+      return reject(new Error('Transport service not available'));
+    }
+
+    const zone = zonesRaw.find(z => z.zone_id === zoneId);
+    if (!zone) {
+      return reject(new Error('Zone not found'));
+    }
+
+    // Check if seeking is allowed for this zone
+    if (!zone.is_seek_allowed) {
+      return reject(new Error('Seeking is not allowed for this zone'));
+    }
+
+    transportService.seek(zone, 'absolute', seconds, error => {
+      if (error) {
+        console.error('Seek failed:', error);
+        reject(error);
+      } else {
+        console.log(`Seeked to ${seconds}s in zone ${zoneId}`);
+        resolve();
+      }
+    });
+  });
+}
+
 // ==================== STORE INTEGRATION ====================
 
 /**

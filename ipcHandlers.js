@@ -46,6 +46,7 @@ const IPC_CHANNELS = {
   // Media and transport controls
   GET_IMAGE: 'roon:getImage',
   TRANSPORT_CONTROL: 'roon:transport:control',
+  SEEK: 'roon:seek',
   CHANGE_VOLUME: 'roon:changeVolume',
   MUTE_TOGGLE: 'roon:muteToggle',
 
@@ -391,6 +392,30 @@ function registerMediaHandlers(store) {
         }
       });
     });
+  });
+
+  /**
+   * Seeks to a specific position in the currently playing track
+   * @param {number} seconds - Target position in seconds
+   * @returns {Promise<void>}
+   */
+  ipcMain.handle(IPC_CHANNELS.SEEK, async (_event, seconds) => {
+    // Validate seek position
+    if (!Validators.isValidSeekPosition(seconds)) {
+      throw new Error(`Invalid seek position: must be a non-negative number`);
+    }
+
+    const selectedZoneId = store.get('lastZoneId');
+    if (!selectedZoneId) {
+      throw new Error('No zone selected');
+    }
+
+    try {
+      await RoonService.seekToPosition(selectedZoneId, seconds);
+    } catch (error) {
+      console.error('Seek failed:', error);
+      throw error;
+    }
   });
 
   /**

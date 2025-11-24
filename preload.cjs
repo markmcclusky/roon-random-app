@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('roon', {
   refreshNowPlaying: () => ipcRenderer.invoke('roon:refreshNowPlaying'), // NEW
   transportControl: action =>
     ipcRenderer.invoke('roon:transport:control', action),
+  seek: seconds => ipcRenderer.invoke('roon:seek', seconds),
   changeVolume: value => ipcRenderer.invoke('roon:changeVolume', value),
   muteToggle: () => ipcRenderer.invoke('roon:muteToggle'),
 
