@@ -875,9 +875,7 @@
                       },
                     },
                     `${genre.title} (${genre.albumCount})`
-                  ),
-
-                  e('div', { className: 'toggle-switch' })
+                  )
                 ),
               ];
 
@@ -906,8 +904,7 @@
                         'span',
                         null,
                         `${subgenre.title} (${subgenre.albumCount})`
-                      ),
-                      e('div', { className: 'toggle-switch' })
+                      )
                     )
                   );
                 });
@@ -1364,23 +1361,6 @@
     const toolbar = e(
       'div',
       { className: 'toolbar' },
-      // Connection status
-      e(
-        'div',
-        { className: 'seg' },
-        e('span', { className: 'muted' }, 'Connected to core:'),
-        e(
-          'strong',
-          {
-            className: roon.state.paired ? 'status-yes' : 'status-no',
-          },
-          roon.state.paired ? 'Yes' : 'No'
-        ),
-        e('span', { className: 'muted' }, `(${roon.state.coreName || 'Core'})`)
-      ),
-
-      e('div', { className: 'divider' }),
-
       // Zone selector
       e(
         'div',
@@ -1402,6 +1382,27 @@
         )
       ),
 
+      e('div', { className: 'divider' }),
+
+      // Connection status
+      e(
+        'div',
+        { className: 'seg' },
+        e('span', { className: 'muted' }, 'Core:'),
+        e(
+          'span',
+          {
+            className: roon.state.paired ? 'status-yes' : 'status-no',
+            style: {
+              fontSize: '12px',
+              verticalAlign: 'baseline',
+            },
+          },
+          '●'
+        ),
+        e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
+      ),
+
       e('div', { className: 'spacer' }),
 
       // Play Random Album button
@@ -1421,7 +1422,11 @@
 
     const nowPlayingCard = e(
       'div',
-      { className: 'card now-playing-card' },
+      {
+        className: 'card now-playing-card',
+        'data-has-art': nowPlaying.art ? 'true' : 'false',
+        style: nowPlaying.art ? { '--bg-image': `url(${nowPlaying.art})` } : {},
+      },
       e('h2', null, 'Now Playing'),
       e(
         'div',
