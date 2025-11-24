@@ -27,18 +27,33 @@ module.exports = {
     } : false,
   },
   makers: [
-    { 
-      name: '@electron-forge/maker-zip', 
-      platforms: ['darwin']
+    // macOS makers
+    {
+      name: '@electron-forge/maker-zip',
+      platforms: ['darwin', 'win32']  // Support both macOS and Windows
     },
-    { 
-      name: '@electron-forge/maker-dmg', 
-      config: { 
+    {
+      name: '@electron-forge/maker-dmg',
+      config: {
         format: 'ULFO',
         name: 'Roon-Random-Album-${version}',
         title: 'Roon Random Album',
         icon: 'assets/icon.icns'
-      } 
+      }
+    },
+    // Windows maker - Squirrel installer
+    {
+      name: '@electron-forge/maker-squirrel',
+      config: {
+        name: 'RoonRandomAlbum',
+        authors: 'Mark McClusky',
+        exe: 'Roon Random Album.exe',
+        description: 'Desktop app for playing random Roon albums with intelligent filtering',
+        iconUrl: 'https://raw.githubusercontent.com/markmcclusky/roon-random-app/main/assets/icon.ico',
+        setupIcon: 'assets/icon.ico',
+        loadingGif: 'assets/icon.png',  // Used during installation
+        noMsi: true,  // Don't create MSI installer (Squirrel only)
+      }
     },
   ],
   plugins: [

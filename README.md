@@ -49,17 +49,30 @@ The app features a clean three-column layout:
 
 ## Installation
 
-### Option 1: Download Releases for MacOS
+### Option 1: Download Pre-built Releases
 
-1. Download the latest `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+#### macOS
+
+1. Download the appropriate `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page:
+   - **Apple Silicon (M1/M2/M3/M4)**: Download the `-arm64.dmg` file
+   - **Intel Macs**: Download the `-x64.dmg` file
 2. Open the DMG and drag the app to your Applications folder
 3. Launch "Roon Random Album" from Applications
 
-Code is signed and notarized, and should just launch. If launch is blocked by OS, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
+The macOS app is signed and notarized, and should launch without issues. If launch is blocked, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
 
 If you get an error message stating that the app is damaged and can't be opened, it's been blocked by Gatekeeper. Go to the terminal and run: `xattr -dr com.apple.quarantine /path/to/Roon\ Random\ Album.app` which should clear the error and allow you to launch.
 
-If anyone wants to help build Windows versions, I'd be very grateful!
+#### Windows
+
+1. Download `RoonRandomAlbumSetup.exe` from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+2. Run the installer
+   - **Note**: Windows SmartScreen may show a warning because the app is currently unsigned
+   - Click "More info" then "Run anyway" to proceed with installation
+3. The app will install and create a desktop shortcut
+4. Launch from the Start Menu or desktop shortcut
+
+**Alternative**: Download the Windows ZIP file for a portable installation without an installer.
 
 ### Option 2: Build from Source
 
