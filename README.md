@@ -113,19 +113,21 @@ The app uses Roon's official API and requires authorization:
 
 ### Basic Operation
 
-1. **Select Genres** (optional): Toggle genres in the center panel to filter your selection
+1. **Select Genres** (optional): Click genres in the center panel to select/deselect them for filtering
 2. **Choose Output Zone**: Select your desired audio output from the toolbar dropdown
 3. **Play Random Album**: Click the dice button or press `R` to start playback
 
 ### Genre Filtering
 
+- **How to Select**: Click on genre names to select/deselect them (selected genres are highlighted)
 - **No Selection**: Chooses from your entire album library
 - **Single Genre**: Plays only albums from that genre
 - **Multiple Genres**: Uses weighted selection based on album counts per genre
-- **Expandable Genres**: Genres with 50+ albums show a triangle icon - click to reveal subgenres
-- **Subgenre Selection**: Subgenres with 10+ albums can be individually selected for targeted discovery
+- **Expandable Genres**: Genres with 50+ albums show a triangle icon - click the triangle to reveal subgenres
+- **Subgenre Selection**: Click on subgenre names to individually select them for targeted discovery
 - **Album Counts**: Numbers show how many albums each genre and subgenre contains
 - **Mixed Selection**: Combine parent genres and specific subgenres for nuanced filtering
+- **Clear All**: Use the "Clear Selections" button to deselect all genres at once
 
 ### Artist Exploration
 
