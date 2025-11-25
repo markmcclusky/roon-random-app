@@ -243,6 +243,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    needs: build-macos  # Wait for macOS job to create the release
 
     steps:
     - name: Check out repository
