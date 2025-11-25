@@ -68,12 +68,12 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
-        # Update package.json version
-        npm version $VERSION --no-git-tag-version
+        # Update package.json version (ignore if already set)
+        npm version $VERSION --no-git-tag-version || true
 
         echo "Building version: $VERSION"
         echo "Using tag: $TAG_NAME"
-    
+
     # Import Apple certificates for code signing
     - name: Import Code-Signing Certificates
       uses: apple-actions/import-codesign-certs@v3
@@ -285,8 +285,8 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
-        # Update package.json version
-        npm version $VERSION --no-git-tag-version
+        # Update package.json version (ignore if already set)
+        npm version $VERSION --no-git-tag-version || true
 
         echo "Building version: $VERSION"
         echo "Using tag: $TAG_NAME"
