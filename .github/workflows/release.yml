@@ -53,8 +53,10 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
+          TAG_NAME="v${VERSION}"
         else
           VERSION=${GITHUB_REF_NAME#v}
+          TAG_NAME=$GITHUB_REF_NAME
         fi
 
         # Normalize version to semver (add .0 if only two parts)
@@ -64,12 +66,13 @@ jobs:
         fi
 
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
         # Update package.json version
         npm version $VERSION --no-git-tag-version
 
         echo "Building version: $VERSION"
+        echo "Using tag: $TAG_NAME"
     
     # Import Apple certificates for code signing
     - name: Import Code-Signing Certificates
@@ -266,8 +269,10 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
+          TAG_NAME="v${VERSION}"
         else
           VERSION=${GITHUB_REF_NAME#v}
+          TAG_NAME=$GITHUB_REF_NAME
         fi
 
         # Normalize version to semver (add .0 if only two parts)
@@ -277,12 +282,13 @@ jobs:
         fi
 
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
         # Update package.json version
         npm version $VERSION --no-git-tag-version
 
         echo "Building version: $VERSION"
+        echo "Using tag: $TAG_NAME"
 
     # Build Windows x64 installer
     - name: Build Electron app - Windows x64
