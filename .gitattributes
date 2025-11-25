@@ -1,0 +1,28 @@
+# Force LF line endings for all text files
+# This ensures consistent line endings across Windows, macOS, and Linux
+
+# Auto-detect text files
+* text=auto eol=lf
+
+# Explicitly declare text files
+*.js text eol=lf
+*.cjs text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.sh text eol=lf
+
+# Denote binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.dmg binary
+*.exe binary
+*.zip binary

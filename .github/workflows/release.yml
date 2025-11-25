@@ -26,7 +26,7 @@ permissions:
   packages: write
 
 jobs:
-  build-and-release:
+  build-macos:
     runs-on: macos-latest
     
     steps:
@@ -53,8 +53,10 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
+          TAG_NAME="v${VERSION}"
         else
           VERSION=${GITHUB_REF_NAME#v}
+          TAG_NAME=$GITHUB_REF_NAME
         fi
 
         # Normalize version to semver (add .0 if only two parts)
@@ -64,12 +66,13 @@ jobs:
         fi
 
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
         # Update package.json version
         npm version $VERSION --no-git-tag-version
 
         echo "Building version: $VERSION"
+        echo "Using tag: $TAG_NAME"
     
     # Import Apple certificates for code signing
     - name: Import Code-Signing Certificates
@@ -155,39 +158,51 @@ jobs:
         gh release create "${{ steps.version.outputs.TAG_NAME }}" \
           --title "Roon Random Album ${{ steps.version.outputs.VERSION }}" \
           --notes "## Roon Random Album ${{ steps.version.outputs.VERSION }}
-        
+
         ### Downloads
-        
+
         **macOS**
         - **Apple Silicon (M1/M2/M3/M4)**: Download \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.dmg\`
         - **Intel Macs**: Download \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.dmg\`
-        - **Alternative**: ZIP files also available (\`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-arm64.zip\` for Apple Silicon, \`Roon-Random-Album-${{ steps.version.outputs.VERSION }}-x64.zip\` for Intel)
-        
+        - **Alternative**: ZIP files also available
+
+        **Windows**
+        - **Windows 10/11 (64-bit)**: Download \`RoonRandomAlbumSetup.exe\`
+        - **Alternative**: ZIP file also available for portable installation
+
         ### Installation
-        
-        **DMG Method (Recommended):**
-        1. Download the \`.dmg\` file
+
+        **macOS - DMG Method (Recommended):**
+        1. Download the \`.dmg\` file for your Mac architecture
         2. Open the DMG and drag the app to your Applications folder
         3. Launch \"Roon Random Album\" from Applications
-        
-        **ZIP Method:**
-        1. Download and extract the \`.zip\` file
-        2. Copy the app to your Applications folder
-        3. Launch \"Roon Random Album\" from Applications
-        
-        If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click \"Open Anyway\"
-        
+        4. If blocked by Gatekeeper, go to System Preferences > Security & Privacy and click \"Open Anyway\"
+
+        **Windows - Installer Method (Recommended):**
+        1. Download \`RoonRandomAlbumSetup.exe\`
+        2. Run the installer (Windows SmartScreen may show a warning - click \"More info\" then \"Run anyway\")
+        3. The app will install and create a desktop shortcut
+        4. Launch from the Start Menu or desktop shortcut
+
+        **Windows - Portable ZIP Method:**
+        1. Download the Windows ZIP file
+        2. Extract to a folder of your choice
+        3. Run \`Roon Random Album.exe\` from the extracted folder
+
         ### What's New
-        
+
         See the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.version.outputs.TAG_NAME }}) for detailed changes in this release.
-        
+
         ---
-        
-        **Requirements**: 
-        - macOS 12.0 (Monterey) or later
+
+        **Requirements**:
+        - **macOS**: 12.0 (Monterey) or later
+        - **Windows**: Windows 10 (64-bit) or later
         - Active Roon subscription and Roon Core running on your network
-        
-        **Note**: This app is signed and notarized for security and should launch without issues on modern macOS versions."
+
+        **Notes**:
+        - macOS app is signed and notarized
+        - Windows app is currently unsigned (SmartScreen warning is expected)"
 
     # Upload assets separately (multi-arch support)  
     - name: Upload Release Assets
@@ -221,7 +236,111 @@ jobs:
     # Post-build summary
     - name: Build Summary
       run: |
-        echo "✅ Build completed successfully!"
+        echo "✅ macOS Build completed successfully!"
+        echo "📦 Version: ${{ steps.version.outputs.VERSION }}"
+        echo "🏷️  Tag: ${{ steps.version.outputs.TAG_NAME }}"
+        echo "🚀 Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"
+
+  build-windows:
+    runs-on: windows-latest
+    needs: build-macos  # Wait for macOS job to create the release
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linter
+      run: npm run lint
+
+    - name: Run tests
+      run: npm run test:run
+
+    - name: Set version from input or tag
+      id: version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+          TAG_NAME="v${VERSION}"
+        else
+          VERSION=${GITHUB_REF_NAME#v}
+          TAG_NAME=$GITHUB_REF_NAME
+        fi
+
+        # Normalize version to semver (add .0 if only two parts)
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          VERSION="${VERSION}.0"
+          echo "Normalized version to: $VERSION"
+        fi
+
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+
+        # Update package.json version
+        npm version $VERSION --no-git-tag-version
+
+        echo "Building version: $VERSION"
+        echo "Using tag: $TAG_NAME"
+
+    # Build Windows x64 installer
+    - name: Build Electron app - Windows x64
+      run: npm run make -- --arch=x64
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Find built files for release
+    - name: Find build artifacts
+      id: artifacts
+      shell: bash
+      run: |
+        echo "Contents of out/ directory:"
+        find out -type f \( -name "*.exe" -o -name "*Setup.exe" -o -name "*.zip" \) | sort
+
+        # Find Windows installer and zip
+        SETUP_EXE=$(find out -name "*Setup.exe" | head -1)
+        ZIP_X64=$(find out -name "*win32-x64*.zip" | head -1)
+        SQUIRREL_NUPKG=$(find out -name "*.nupkg" | head -1)
+
+        echo "SETUP_EXE=$SETUP_EXE" >> $GITHUB_OUTPUT
+        echo "ZIP_X64=$ZIP_X64" >> $GITHUB_OUTPUT
+        echo "SQUIRREL_NUPKG=$SQUIRREL_NUPKG" >> $GITHUB_OUTPUT
+
+        echo "Found artifacts:"
+        echo "  Setup: $SETUP_EXE"
+        echo "  ZIP: $ZIP_X64"
+        echo "  NuGet: $SQUIRREL_NUPKG"
+
+    # Upload Windows assets to existing release
+    - name: Upload Windows Release Assets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        # Upload Setup.exe (main installer)
+        if [ -n "${{ steps.artifacts.outputs.SETUP_EXE }}" ]; then
+          echo "Uploading Windows installer: ${{ steps.artifacts.outputs.SETUP_EXE }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.SETUP_EXE }}" --clobber
+        fi
+
+        # Upload Windows ZIP
+        if [ -n "${{ steps.artifacts.outputs.ZIP_X64 }}" ]; then
+          echo "Uploading Windows ZIP: ${{ steps.artifacts.outputs.ZIP_X64 }}"
+          gh release upload "${{ steps.version.outputs.TAG_NAME }}" "${{ steps.artifacts.outputs.ZIP_X64 }}" --clobber
+        fi
+
+    # Post-build summary
+    - name: Build Summary
+      run: |
+        echo "✅ Windows Build completed successfully!"
         echo "📦 Version: ${{ steps.version.outputs.VERSION }}"
         echo "🏷️  Tag: ${{ steps.version.outputs.TAG_NAME }}"
         echo "🚀 Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"

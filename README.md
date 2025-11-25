@@ -49,17 +49,30 @@ The app features a clean three-column layout:
 
 ## Installation
 
-### Option 1: Download Releases for MacOS
+### Option 1: Download Pre-built Releases
 
-1. Download the latest `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+#### macOS
+
+1. Download the appropriate `.dmg` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page:
+   - **Apple Silicon (M1/M2/M3/M4)**: Download the `-arm64.dmg` file
+   - **Intel Macs**: Download the `-x64.dmg` file
 2. Open the DMG and drag the app to your Applications folder
 3. Launch "Roon Random Album" from Applications
 
-Code is signed and notarized, and should just launch. If launch is blocked by OS, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
+The macOS app is signed and notarized, and should launch without issues. If launch is blocked, go to System Preferences > Security & Privacy > General tab, where you should see a message about the blocked app with an "Open Anyway" button.
 
 If you get an error message stating that the app is damaged and can't be opened, it's been blocked by Gatekeeper. Go to the terminal and run: `xattr -dr com.apple.quarantine /path/to/Roon\ Random\ Album.app` which should clear the error and allow you to launch.
 
-If anyone wants to help build Windows versions, I'd be very grateful!
+#### Windows
+
+1. Download `RoonRandomAlbumSetup.exe` from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+2. Run the installer
+   - **Note**: Windows SmartScreen may show a warning because the app is currently unsigned
+   - Click "More info" then "Run anyway" to proceed with installation
+3. The app will install and create a desktop shortcut
+4. Launch from the Start Menu or desktop shortcut
+
+**Alternative**: Download the Windows ZIP file for a portable installation without an installer.
 
 ### Option 2: Build from Source
 
@@ -100,19 +113,21 @@ The app uses Roon's official API and requires authorization:
 
 ### Basic Operation
 
-1. **Select Genres** (optional): Toggle genres in the center panel to filter your selection
+1. **Select Genres** (optional): Click genres in the center panel to select/deselect them for filtering
 2. **Choose Output Zone**: Select your desired audio output from the toolbar dropdown
 3. **Play Random Album**: Click the dice button or press `R` to start playback
 
 ### Genre Filtering
 
+- **How to Select**: Click on genre names to select/deselect them (selected genres are highlighted)
 - **No Selection**: Chooses from your entire album library
 - **Single Genre**: Plays only albums from that genre
 - **Multiple Genres**: Uses weighted selection based on album counts per genre
-- **Expandable Genres**: Genres with 50+ albums show a triangle icon - click to reveal subgenres
-- **Subgenre Selection**: Subgenres with 10+ albums can be individually selected for targeted discovery
+- **Expandable Genres**: Genres with 50+ albums show a triangle icon - click the triangle to reveal subgenres
+- **Subgenre Selection**: Click on subgenre names to individually select them for targeted discovery
 - **Album Counts**: Numbers show how many albums each genre and subgenre contains
 - **Mixed Selection**: Combine parent genres and specific subgenres for nuanced filtering
+- **Clear All**: Use the "Clear Selections" button to deselect all genres at once
 
 ### Artist Exploration
 
