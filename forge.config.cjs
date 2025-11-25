@@ -51,7 +51,7 @@ module.exports = {
         description: 'Desktop app for playing random Roon albums with intelligent filtering',
         iconUrl: 'https://raw.githubusercontent.com/markmcclusky/roon-random-app/main/assets/icon.ico',
         setupIcon: 'assets/icon.ico',
-        loadingGif: 'assets/icon.png',  // Used during installation
+        loadingGif: 'assets/loading.png',  // 256x256 loading screen during installation
         noMsi: true,  // Don't create MSI installer (Squirrel only)
       }
     },
