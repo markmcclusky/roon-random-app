@@ -14,8 +14,10 @@ A desktop application for discovering music through intelligent random album sel
 ### 🎵 Now Playing Integration
 
 - **Real-time Display**: Shows current track, album, artist, cover art, and track progress
+- **Interactive Progress Bar**: Click anywhere on the progress bar to seek to that position in the track
 - **Transport Controls**: Play, pause, next, previous with keyboard shortcuts
 - **Volume Control**: Integrated volume slider for supported zones with mute function
+- **Blurred Background**: Subtle blurred album art backdrop enhances visual appeal
 
 ### 🎨 Artist Discovery
 
@@ -69,8 +71,8 @@ If you get an error message stating that the app is damaged and can't be opened,
 2. Run the installer
    - **Note**: Windows SmartScreen may show a warning because the app is currently unsigned
    - Click "More info" then "Run anyway" to proceed with installation
-3. The app will install and create a desktop shortcut
-4. Launch from the Start Menu or desktop shortcut
+3. The app will install to `%LOCALAPPDATA%\RoonRandomAlbum\` and create a Start Menu entry
+4. Launch from the Start Menu (search for "Roon Random Album")
 
 **Alternative**: Download the Windows ZIP file for a portable installation without an installer.
 
@@ -188,6 +190,7 @@ The app automatically saves:
 ### Data Storage
 
 - **macOS**: `~/Library/Application Support/Roon Random Album/`
+- **Windows**: `%LOCALAPPDATA%\RoonRandomAlbum\`
 - **Config File**: `config.json` contains all persistent state
 
 ## Development
@@ -205,6 +208,10 @@ npm --version   # Should be 8.0.0 or higher
 - `npm run dev` - Run with development debugging enabled
 - `npm run make` - Build distributable packages
 - `npm run package` - Package without creating installers
+- `npm test` - Run tests in watch mode
+- `npm run test:run` - Run tests once (CI mode)
+- `npm run lint` - Check for linting issues
+- `npm run lint:fix` - Auto-fix linting issues
 
 ### Building Distribution
 
@@ -212,11 +219,17 @@ npm --version   # Should be 8.0.0 or higher
 npm run make
 ```
 
-Creates:
+Creates platform-specific installers:
 
-- **DMG installer** for easy macOS distribution
-- **ZIP archive** for manual installation
-- Output in `out/` directory
+**macOS:**
+- DMG installer (both ARM64 and Intel x64)
+- ZIP archive for manual installation
+
+**Windows:**
+- Setup.exe installer (Squirrel.Windows)
+- ZIP archive for portable installation
+
+Output in `out/` directory
 
 ### Code Style
 
@@ -224,6 +237,21 @@ Creates:
 - Functional React components with hooks
 - Comprehensive error handling
 - Extensive logging for debugging
+
+### Testing
+
+The project uses [Vitest](https://vitest.dev/) for testing:
+
+```bash
+npm test          # Run tests in watch mode
+npm run test:run  # Run tests once (for CI)
+npm run test:ui   # Run tests with UI
+```
+
+Test files are located in the `test/` directory and cover:
+- Input validation utilities
+- Roon helper functions
+- Activity management logic
 
 ## Troubleshooting
 
@@ -281,7 +309,7 @@ For issues or questions:
 
 - Check existing GitHub issues
 - Verify Roon Core connectivity first
-- Include app version and macOS version in reports
+- Include app version and OS version (macOS or Windows) in reports
 - Console logs help diagnose connection problems
 
 ## Acknowledgments
