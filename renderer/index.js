@@ -558,6 +558,18 @@
       }
     }
 
+    /**
+     * Seeks to a specific position in the current track
+     * @param {number} seconds - Target position in seconds
+     */
+    async function seek(seconds) {
+      try {
+        await window.roon.seek(seconds);
+      } catch (error) {
+        console.error('Seek failed:', error);
+      }
+    }
+
     // ==================== INITIALIZATION ====================
 
     useEffect(() => {
@@ -673,6 +685,7 @@
       playAlbumByName,
       playRandomAlbumByArtist,
       transportControl,
+      seek,
       changeVolume,
       muteToggle, // NEW
       clearActivity, // NEW
@@ -1348,6 +1361,29 @@
       await roon.playAlbumByName(activityItem.title, activityItem.subtitle);
     }
 
+    /**
+     * Handles click on progress bar to seek to a specific position
+     * @param {MouseEvent} event - Click event
+     */
+    function handleProgressBarClick(event) {
+      // Only seek if we have a valid track length
+      if (!nowPlaying.length) return;
+
+      // Get the progress bar element and its bounding rect
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+
+      // Calculate click position as percentage of bar width
+      const clickX = event.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+
+      // Calculate target time in seconds
+      const targetSeconds = percentage * nowPlaying.length;
+
+      // Seek to the calculated position
+      roon.seek(targetSeconds);
+    }
+
     // ==================== UI STATE CALCULATIONS ====================
 
     const isPlaying = currentZone?.state === 'playing';
@@ -1528,7 +1564,11 @@
               ),
               e(
                 'div',
-                { className: 'progress-bar' },
+                {
+                  className: 'progress-bar',
+                  onClick: handleProgressBarClick,
+                  style: { cursor: 'pointer' },
+                },
                 e('div', {
                   className: 'progress-fill',
                   style: {
