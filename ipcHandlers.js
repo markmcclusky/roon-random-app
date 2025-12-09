@@ -36,6 +36,11 @@ const IPC_CHANNELS = {
   GET_ZONE_NOW_PLAYING: 'roon:getZoneNowPlaying',
   REFRESH_NOW_PLAYING: 'roon:refreshNowPlaying', // NEW
 
+  // Profile management
+  LIST_PROFILES: 'roon:listProfiles',
+  SWITCH_PROFILE: 'roon:switchProfile',
+  GET_CURRENT_PROFILE: 'roon:getCurrentProfile',
+
   // Music browsing and selection
   LIST_GENRES: 'roon:listGenres',
   GET_SUBGENRES: 'roon:getSubgenres',
@@ -185,6 +190,53 @@ function registerZoneHandlers(store, mainWindow) {
     }
 
     return nowPlaying;
+  });
+}
+
+// ==================== PROFILE MANAGEMENT HANDLERS ====================
+
+/**
+ * Registers handlers for profile management
+ */
+function registerProfileHandlers() {
+  /**
+   * Returns list of available profiles
+   * @returns {Promise<Array>} Array of profile objects
+   */
+  ipcMain.handle(IPC_CHANNELS.LIST_PROFILES, async () => {
+    try {
+      return await RoonService.listProfiles();
+    } catch (error) {
+      console.error('Failed to list profiles:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Switches to a different profile
+   * @param {string} profileName - The name of the profile to switch to
+   * @returns {Promise<Object>} Result with success status
+   */
+  ipcMain.handle(IPC_CHANNELS.SWITCH_PROFILE, async (_event, profileName) => {
+    // Validate profile name
+    if (!Validators.isNonEmptyString(profileName)) {
+      throw new Error('Invalid profile name: must be a non-empty string');
+    }
+
+    try {
+      return await RoonService.switchProfile(profileName);
+    } catch (error) {
+      console.error('Failed to switch profile:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Gets the currently selected profile name
+   * @returns {string|null} Current profile name or null
+   */
+  ipcMain.handle(IPC_CHANNELS.GET_CURRENT_PROFILE, () => {
+    return RoonService.getCurrentProfile();
   });
 }
 
@@ -695,6 +747,7 @@ export function registerIpcHandlers(store, mainWindow) {
   // Register all handler groups
   registerStateHandlers(store, mainWindow);
   registerZoneHandlers(store, mainWindow); // Updated to pass mainWindow
+  registerProfileHandlers();
   registerMusicHandlers();
   registerMediaHandlers(store);
   registerActivityHandlers(store);

@@ -73,6 +73,10 @@ const lastNowPlayingByZone = Object.create(null);
 let genresCache = null;
 let genresCacheTime = null;
 
+// Profile caching
+let profilesCache = null;
+let currentProfile = null;
+
 // Session management
 const playedThisSession = new Set();
 const artistSessionHistory = new Map();
@@ -99,6 +103,17 @@ function emitEvent(payload) {
  */
 function emitZones() {
   emitEvent({ type: 'zones', zones: zonesCache });
+}
+
+/**
+ * Emits current profiles list to the renderer
+ */
+function emitProfiles() {
+  emitEvent({
+    type: 'profiles',
+    profiles: profilesCache,
+    currentProfile,
+  });
 }
 
 /**
@@ -218,6 +233,15 @@ function handleCorePaired(coreInstance) {
   // Subscribe to zone changes
   transportService.subscribe_zones(handleZoneUpdates);
 
+  // Load profiles
+  listProfiles()
+    .then(() => {
+      emitProfiles();
+    })
+    .catch(error => {
+      console.error('Failed to load profiles on connect:', error);
+    });
+
   emitEvent({
     type: 'core',
     status: 'paired',
@@ -237,8 +261,11 @@ function handleCoreUnpaired() {
   transportService = null;
   zonesCache = [];
   zonesRaw = [];
+  profilesCache = null;
+  currentProfile = null;
 
   emitZones();
+  emitProfiles();
 }
 
 /**
@@ -311,6 +338,185 @@ function handleZoneUpdates(response, data) {
       maybeEmitNowPlaying(selectedZoneId, nowPlaying);
     }
   }
+}
+
+// ==================== PROFILE MANAGEMENT ====================
+
+/**
+ * Retrieves the list of available profiles
+ * @returns {Promise<Array>} Array of profile objects
+ */
+export async function listProfiles() {
+  if (!browseService) {
+    throw new Error('Not connected to a Roon Core');
+  }
+
+  try {
+    // Navigate to Settings > Profile
+    await browseAsync({ hierarchy: 'browse', pop_all: true });
+    const root = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Find Settings node
+    const settingsNode = findItemCaseInsensitive(root.items, 'Settings');
+    if (!settingsNode?.item_key) {
+      throw new Error('Could not locate Settings in this core.');
+    }
+
+    await browseAsync({ hierarchy: 'browse', item_key: settingsNode.item_key });
+    const settingsItems = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Find Profile node
+    const profileNode = settingsItems.items?.find(
+      item => item.title && item.title.toLowerCase() === 'profile'
+    );
+
+    if (!profileNode?.item_key) {
+      throw new Error('Could not locate Profile in Settings.');
+    }
+
+    // Store current profile from subtitle
+    if (profileNode.subtitle) {
+      currentProfile = profileNode.subtitle;
+    }
+
+    // Browse into Profile
+    await browseAsync({ hierarchy: 'browse', item_key: profileNode.item_key });
+    const profilesList = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Extract profiles
+    const profiles = (profilesList.items || []).map(item => ({
+      name: item.title,
+      itemKey: item.item_key,
+      isSelected: item.subtitle === 'selected',
+    }));
+
+    // Update cache
+    profilesCache = profiles;
+
+    // Set current profile from selected item
+    const selectedProfile = profiles.find(p => p.isSelected);
+    if (selectedProfile) {
+      currentProfile = selectedProfile.name;
+    }
+
+    return profiles;
+  } catch (error) {
+    console.error('Failed to load profiles:', error);
+    throw error;
+  }
+}
+
+/**
+ * Switches to a different profile
+ * @param {string} profileName - The name of the profile to switch to
+ * @returns {Promise<Object>} Result with new profile name
+ */
+export async function switchProfile(profileName) {
+  if (!browseService) {
+    throw new Error('Not connected to a Roon Core');
+  }
+
+  try {
+    // Navigate fresh to Settings > Profile to get current item keys
+    await browseAsync({ hierarchy: 'browse', pop_all: true });
+    const root = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Find Settings node
+    const settingsNode = findItemCaseInsensitive(root.items, 'Settings');
+    if (!settingsNode?.item_key) {
+      throw new Error('Could not locate Settings in this core.');
+    }
+
+    await browseAsync({ hierarchy: 'browse', item_key: settingsNode.item_key });
+    const settingsItems = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Find Profile node
+    const profileNode = settingsItems.items?.find(
+      item => item.title && item.title.toLowerCase() === 'profile'
+    );
+
+    if (!profileNode?.item_key) {
+      throw new Error('Could not locate Profile in Settings.');
+    }
+
+    // Browse into Profile
+    await browseAsync({ hierarchy: 'browse', item_key: profileNode.item_key });
+    const profilesList = await loadAsync({
+      hierarchy: 'browse',
+      offset: 0,
+      count: 100,
+    });
+
+    // Find the target profile by name
+    const targetProfile = (profilesList.items || []).find(
+      item => item.title === profileName
+    );
+
+    if (!targetProfile?.item_key) {
+      throw new Error(`Profile '${profileName}' not found.`);
+    }
+
+    // Browse to the profile's item_key to switch
+    await browseAsync({
+      hierarchy: 'browse',
+      item_key: targetProfile.item_key,
+    });
+
+    // Clear genre cache when switching profiles
+    // (different profiles may have different libraries)
+    genresCache = null;
+    genresCacheTime = null;
+
+    // Update current profile
+    currentProfile = profileName;
+
+    // Refresh profile list to update the cache with new state
+    await listProfiles();
+
+    // Emit profile update to renderer
+    emitProfiles();
+
+    return { success: true, currentProfile };
+  } catch (error) {
+    console.error('Failed to switch profile:', error);
+    throw error;
+  }
+}
+
+/**
+ * Gets the currently selected profile name
+ * @returns {string|null} Current profile name or null
+ */
+export function getCurrentProfile() {
+  return currentProfile;
+}
+
+/**
+ * Gets the cached profiles list
+ * @returns {Array|null} Cached profiles array or null
+ */
+export function getProfilesCache() {
+  return profilesCache;
 }
 
 // ==================== GENRE MANAGEMENT ====================

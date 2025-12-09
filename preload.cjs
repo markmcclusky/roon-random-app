@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('roon', {
   changeVolume: value => ipcRenderer.invoke('roon:changeVolume', value),
   muteToggle: () => ipcRenderer.invoke('roon:muteToggle'),
 
+  // Profile management
+  listProfiles: () => ipcRenderer.invoke('roon:listProfiles'),
+  switchProfile: profileName => ipcRenderer.invoke('roon:switchProfile', profileName),
+  getCurrentProfile: () => ipcRenderer.invoke('roon:getCurrentProfile'),
+
   // Activity persistence
   getActivity: () => ipcRenderer.invoke('roon:getActivity'),
   addActivity: activityItem => ipcRenderer.invoke('roon:addActivity', activityItem),
