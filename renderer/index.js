@@ -389,6 +389,8 @@
     });
 
     const [zones, setZones] = useState([]);
+    const [profiles, setProfiles] = useState([]);
+    const [currentProfile, setCurrentProfile] = useState(null);
     const [genres, setGenres] = useState([]);
     const [busy, setBusy] = useState(false);
 
@@ -444,6 +446,24 @@
       }
     }
 
+    /**
+     * Refreshes the list of available profiles
+     */
+    async function refreshProfiles() {
+      try {
+        const profileList = await window.roon.listProfiles();
+        setProfiles(Array.isArray(profileList) ? profileList : []);
+
+        // Set current profile from the selected one
+        const selectedProfile = profileList?.find(p => p.isSelected);
+        if (selectedProfile) {
+          setCurrentProfile(selectedProfile.name);
+        }
+      } catch (error) {
+        console.error('Failed to list profiles:', error);
+      }
+    }
+
     // ==================== SETTINGS FUNCTIONS ====================
 
     /**
@@ -469,6 +489,21 @@
         await refreshState();
       } catch (error) {
         console.error('Failed to select zone:', error);
+      }
+    }
+
+    /**
+     * Switches to a different profile
+     * @param {string} profileName - Profile name
+     */
+    async function switchProfile(profileName) {
+      try {
+        await window.roon.switchProfile(profileName);
+        // Genres will need to be refreshed after profile switch
+        await refreshGenres();
+      } catch (error) {
+        console.error('Failed to switch profile:', error);
+        alert(`Error switching profile: ${error.message}`);
       }
     }
 
@@ -579,6 +614,7 @@
       (async function () {
         await refreshState();
         await refreshZones();
+        await refreshProfiles();
         await refreshGenres();
       })();
 
@@ -620,6 +656,9 @@
               await refreshNowPlaying();
             }, 200);
           }
+        } else if (payload.type === 'profiles') {
+          setProfiles(payload.profiles || []);
+          setCurrentProfile(payload.currentProfile || null);
         }
       });
 
@@ -673,14 +712,18 @@
       // State
       state,
       zones,
+      profiles,
+      currentProfile,
       genres,
       busy,
 
       // Functions
       refreshGenres,
+      refreshProfiles,
       refreshNowPlaying, // NEW
       setFilters,
       selectZone,
+      switchProfile,
       playRandomAlbum,
       playAlbumByName,
       playRandomAlbumByArtist,
@@ -1438,6 +1481,40 @@
         ),
         e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
       ),
+
+      e('div', { className: 'divider' }),
+
+      // Profile selector
+      roon.profiles && roon.profiles.length > 0
+        ? e(
+            'div',
+            { className: 'seg' },
+            e('span', { className: 'muted' }, 'Profile'),
+            e(
+              'select',
+              {
+                value:
+                  roon.profiles.find(p => p.isSelected)?.name ||
+                  roon.currentProfile ||
+                  '',
+                disabled: !roon.state.paired || roon.busy,
+                onChange(event) {
+                  const selectedProfileName = event.target.value;
+                  if (selectedProfileName) {
+                    roon.switchProfile(selectedProfileName);
+                  }
+                },
+              },
+              roon.profiles.map(profile => {
+                return e(
+                  'option',
+                  { key: profile.name, value: profile.name },
+                  profile.name
+                );
+              })
+            )
+          )
+        : null,
 
       e('div', { className: 'spacer' }),
 
