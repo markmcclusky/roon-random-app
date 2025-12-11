@@ -72,6 +72,7 @@ const lastNowPlayingByZone = Object.create(null);
 // Genre caching
 let genresCache = null;
 let genresCacheTime = null;
+let genreFetchPromise = null; // Prevents concurrent API calls
 
 // Profile caching
 let profilesCache = null;
@@ -226,6 +227,9 @@ function connectToRoon() {
  * @param {Object} coreInstance - Roon core instance
  */
 function handleCorePaired(coreInstance) {
+  console.log('[TIMING] 🔌 Core paired:', coreInstance.display_name);
+  console.time('[TIMING] handleCorePaired');
+
   core = coreInstance;
   browseService = core.services.RoonApiBrowse;
   transportService = core.services.RoonApiTransport;
@@ -234,11 +238,14 @@ function handleCorePaired(coreInstance) {
   transportService.subscribe_zones(handleZoneUpdates);
 
   // Load profiles
+  console.time('[TIMING] handleCorePaired: listProfiles');
   listProfiles()
     .then(() => {
+      console.timeEnd('[TIMING] handleCorePaired: listProfiles');
       emitProfiles();
     })
     .catch(error => {
+      console.timeEnd('[TIMING] handleCorePaired: listProfiles');
       console.error('Failed to load profiles on connect:', error);
     });
 
@@ -247,6 +254,8 @@ function handleCorePaired(coreInstance) {
     status: 'paired',
     coreDisplayName: core.display_name,
   });
+
+  console.timeEnd('[TIMING] handleCorePaired');
 }
 
 /**
@@ -347,6 +356,21 @@ function handleZoneUpdates(response, data) {
  * @returns {Promise<Array>} Array of profile objects
  */
 export async function listProfiles() {
+  console.time('[TIMING] listProfiles');
+
+  // Return cached profiles if available (avoids duplicate slow API calls)
+  if (
+    profilesCache &&
+    Array.isArray(profilesCache) &&
+    profilesCache.length > 0
+  ) {
+    console.log('[TIMING] listProfiles: returning cached data');
+    console.timeEnd('[TIMING] listProfiles');
+    return profilesCache;
+  }
+
+  console.log('[TIMING] listProfiles: fetching from API');
+
   if (!browseService) {
     throw new Error('Not connected to a Roon Core');
   }
@@ -411,8 +435,10 @@ export async function listProfiles() {
       currentProfile = selectedProfile.name;
     }
 
+    console.timeEnd('[TIMING] listProfiles');
     return profiles;
   } catch (error) {
+    console.timeEnd('[TIMING] listProfiles');
     console.error('Failed to load profiles:', error);
     throw error;
   }
@@ -467,19 +493,24 @@ export async function switchProfile(profileName) {
       count: 100,
     });
 
-    // Find the target profile by name
-    const targetProfile = (profilesList.items || []).find(
-      item => item.title === profileName
-    );
+    // Extract profiles from the list we already loaded
+    const profiles = (profilesList.items || []).map(item => ({
+      name: item.title,
+      itemKey: item.item_key,
+      isSelected: item.subtitle === 'selected',
+    }));
 
-    if (!targetProfile?.item_key) {
+    // Find the target profile by name
+    const targetProfile = profiles.find(p => p.name === profileName);
+
+    if (!targetProfile?.itemKey) {
       throw new Error(`Profile '${profileName}' not found.`);
     }
 
     // Browse to the profile's item_key to switch
     await browseAsync({
       hierarchy: 'browse',
-      item_key: targetProfile.item_key,
+      item_key: targetProfile.itemKey,
     });
 
     // Clear genre cache when switching profiles
@@ -490,8 +521,12 @@ export async function switchProfile(profileName) {
     // Update current profile
     currentProfile = profileName;
 
-    // Refresh profile list to update the cache with new state
-    await listProfiles();
+    // Update the profiles cache with the data we already have
+    // (no need to call listProfiles() again - we just navigated through the profiles)
+    profilesCache = profiles.map(p => ({
+      ...p,
+      isSelected: p.name === profileName, // Update selection to reflect the switch
+    }));
 
     // Emit profile update to renderer
     emitProfiles();
@@ -526,86 +561,118 @@ export function getProfilesCache() {
  * @returns {Promise<Array>} Array of genre objects with title and album count
  */
 export async function listGenres() {
+  console.time('[TIMING] listGenres');
+  const callId = Math.random().toString(36).substring(7);
+  console.log(`[TIMING] listGenres called (ID: ${callId})`);
+
   // Return cached data if still fresh
   if (genresCache && Date.now() - genresCacheTime < GENRE_CACHE_DURATION) {
+    console.log(`[TIMING] listGenres (${callId}): returning cached data`);
+    console.timeEnd('[TIMING] listGenres');
     return genresCache;
   }
+
+  // Return in-flight request to prevent parallel fetches (race condition fix)
+  if (genreFetchPromise) {
+    console.log(`[TIMING] listGenres (${callId}): returning in-flight promise`);
+    console.timeEnd('[TIMING] listGenres');
+    return genreFetchPromise;
+  }
+
+  console.log(
+    `[TIMING] listGenres (${callId}): fetching from API (cache miss or stale)`
+  );
 
   if (!browseService) {
     throw new Error('Not connected to a Roon Core');
   }
 
-  try {
-    // Navigate to genres section
-    await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({
-      hierarchy: 'browse',
-      offset: 0,
-      count: 500,
-    });
-
-    const genresNode = findItemCaseInsensitive(root.items, 'Genres');
-    if (!genresNode?.item_key) {
-      throw new Error('Could not locate Genres in this core.');
-    }
-
-    await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
-
-    // Load all genres with pagination
-    const genres = [];
-    let offset = 0;
-    const albumCountRegex = /(\d+)\s+Albums?$/;
-
-    while (true) {
-      const page = await loadAsync({
+  // Store the fetch promise to prevent concurrent requests
+  genreFetchPromise = (async () => {
+    try {
+      // Navigate to genres section
+      await browseAsync({ hierarchy: 'browse', pop_all: true });
+      const root = await loadAsync({
         hierarchy: 'browse',
-        item_key: genresNode.item_key,
-        offset,
-        count: BROWSE_PAGE_SIZE,
+        offset: 0,
+        count: 500,
       });
 
-      const items = page.items || [];
-      if (!items.length) break;
+      const genresNode = findItemCaseInsensitive(root.items, 'Genres');
+      if (!genresNode?.item_key) {
+        throw new Error('Could not locate Genres in this core.');
+      }
 
-      for (const item of items) {
-        if (item?.title && item?.subtitle) {
-          const match = item.subtitle.match(albumCountRegex);
-          const albumCount = match ? parseInt(match[1], 10) : 0;
+      await browseAsync({ hierarchy: 'browse', item_key: genresNode.item_key });
 
-          // Only include genres with albums
-          if (albumCount > 0) {
-            genres.push({
-              title: item.title.trim(),
-              albumCount,
-              expandable: albumCount >= 50, // Mark genres with 50+ albums as expandable
-            });
+      // Load all genres with pagination
+      const genres = [];
+      let offset = 0;
+      const albumCountRegex = /(\d+)\s+Albums?$/;
+
+      while (true) {
+        const page = await loadAsync({
+          hierarchy: 'browse',
+          item_key: genresNode.item_key,
+          offset,
+          count: BROWSE_PAGE_SIZE,
+        });
+
+        const items = page.items || [];
+        if (!items.length) break;
+
+        for (const item of items) {
+          if (item?.title && item?.subtitle) {
+            const match = item.subtitle.match(albumCountRegex);
+            const albumCount = match ? parseInt(match[1], 10) : 0;
+
+            // Only include genres with albums
+            if (albumCount > 0) {
+              genres.push({
+                title: item.title.trim(),
+                albumCount,
+                expandable: albumCount >= 50, // Mark genres with 50+ albums as expandable
+              });
+            }
           }
+        }
+
+        offset += items.length;
+      }
+
+      // Sort by album count (descending) and remove duplicates
+      genres.sort((a, b) => b.albumCount - a.albumCount);
+
+      const uniqueGenres = [];
+      const seenTitles = new Set();
+      for (const genre of genres) {
+        if (!seenTitles.has(genre.title)) {
+          uniqueGenres.push(genre);
+          seenTitles.add(genre.title);
         }
       }
 
-      offset += items.length;
+      // Cache the results
+      genresCache = uniqueGenres;
+      genresCacheTime = Date.now();
+
+      console.log(
+        `[TIMING] listGenres (${callId}): loaded ${uniqueGenres.length} genres`
+      );
+      console.timeEnd('[TIMING] listGenres');
+      return uniqueGenres;
+    } catch (error) {
+      console.timeEnd('[TIMING] listGenres');
+      console.error('Failed to load genres:', error);
+      throw error;
     }
+  })();
 
-    // Sort by album count (descending) and remove duplicates
-    genres.sort((a, b) => b.albumCount - a.albumCount);
-
-    const uniqueGenres = [];
-    const seenTitles = new Set();
-    for (const genre of genres) {
-      if (!seenTitles.has(genre.title)) {
-        uniqueGenres.push(genre);
-        seenTitles.add(genre.title);
-      }
-    }
-
-    // Cache the results
-    genresCache = uniqueGenres;
-    genresCacheTime = Date.now();
-
-    return uniqueGenres;
-  } catch (error) {
-    console.error('Failed to load genres:', error);
-    throw error;
+  try {
+    const result = await genreFetchPromise;
+    return result;
+  } finally {
+    genreFetchPromise = null;
   }
 }
 

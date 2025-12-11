@@ -425,6 +425,7 @@
      */
     async function refreshGenres() {
       try {
+        console.log('[UI] refreshGenres() called');
         const genreList = await window.roon.listGenres();
         setGenres(Array.isArray(genreList) ? genreList : []);
       } catch (error) {
@@ -612,10 +613,51 @@
 
       // Initial data loading
       (async function () {
+        console.log('[TIMING] 🚀 App initialization started');
+        console.time('[TIMING] Total initialization');
+
+        console.time('[TIMING] refreshState');
         await refreshState();
+        console.timeEnd('[TIMING] refreshState');
+
+        console.time('[TIMING] refreshZones');
         await refreshZones();
-        await refreshProfiles();
-        await refreshGenres();
+        console.timeEnd('[TIMING] refreshZones');
+
+        // Only load profiles/genres if core is already paired
+        // Otherwise, handleCorePaired will load them when connection happens
+        const currentState = await window.roon.getState();
+        if (currentState.paired) {
+          console.log(
+            '[TIMING] Core already paired, loading profiles and genres'
+          );
+
+          console.time('[TIMING] refreshProfiles');
+          await refreshProfiles();
+          console.timeEnd('[TIMING] refreshProfiles');
+
+          console.time('[TIMING] refreshGenres');
+          await refreshGenres();
+          console.timeEnd('[TIMING] refreshGenres');
+
+          // Also load Now Playing if we have a zone selected (prevents race condition)
+          if (currentState.lastZoneId) {
+            console.log(
+              '[TIMING] Loading initial Now Playing for zone:',
+              currentState.lastZoneId
+            );
+            console.time('[TIMING] refreshNowPlaying');
+            await refreshNowPlaying();
+            console.timeEnd('[TIMING] refreshNowPlaying');
+          }
+        } else {
+          console.log(
+            '[TIMING] Core not paired yet, will load profiles/genres after pairing'
+          );
+        }
+
+        console.timeEnd('[TIMING] Total initialization');
+        console.log('[TIMING] ✅ App initialization complete');
       })();
 
       // Set up event listener for real-time updates
@@ -629,7 +671,7 @@
             coreName: payload.coreDisplayName,
           }));
 
-          // When core becomes paired, try to get initial now playing after a delay
+          // When core becomes paired, load genres and try to get initial now playing
           if (payload.status === 'paired' && !hasTriedInitialNowPlaying) {
             hasTriedInitialNowPlaying = true;
             setTimeout(async () => {
@@ -637,6 +679,10 @@
                 '[UI] Core paired, attempting to refresh now playing...'
               );
               await refreshNowPlaying();
+
+              // Also refresh genres if not already loaded
+              console.log('[UI] Core paired, loading genres...');
+              await refreshGenres();
             }, 500); // Give some time for zones to be loaded
           }
         } else if (payload.type === 'zones') {
