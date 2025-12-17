@@ -78,6 +78,12 @@ function createMainWindow() {
   const htmlPath = path.join(__dirname, 'renderer', 'index.html');
   mainWindow.loadFile(htmlPath);
 
+  // Clean up window reference when closed to prevent memory leak
+  mainWindow.on('closed', () => {
+    console.log('Main window closed, clearing reference');
+    mainWindow = null;
+  });
+
   // Optional: Open DevTools for debugging (uncomment when needed)
   // mainWindow.webContents.once('dom-ready', () => {
   //   mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -162,8 +168,14 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   console.log('Application shutting down...');
 
-  // Any cleanup code would go here
+  // Clean up window reference if it still exists
+  if (mainWindow) {
+    console.log('Cleaning up main window reference');
+    mainWindow = null;
+  }
+
   // The Roon service will automatically disconnect when the process exits
+  console.log('Cleanup complete');
 });
 
 // ==================== ERROR HANDLING ====================

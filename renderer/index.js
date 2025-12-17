@@ -12,7 +12,7 @@
     throw new Error('React/ReactDOM not found.');
   }
 
-  const { createElement: e, useState, useEffect } = React;
+  const { createElement: e, useState, useEffect, useCallback } = React;
   const root = document.getElementById('root');
 
   // ==================== CONSTANTS ====================
@@ -50,18 +50,33 @@
    * "Miles Davis / John Coltrane / Bill Evans" for collaborations.
    * This function returns just the first (primary) artist name.
    *
+   * Note: Roon uses " / " (space-slash-space) as the collaboration separator,
+   * not just "/" - this prevents breaking artist names like "AC/DC"
+   *
    * @param {string} artistString - Full artist string from Roon
    * @returns {string} Primary artist name
+   *
+   * @example
+   * extractPrimaryArtist("Lou Donaldson / Leon Spencer") // "Lou Donaldson"
+   * extractPrimaryArtist("AC/DC") // "AC/DC"
+   * extractPrimaryArtist("Miles Davis / John Coltrane / Bill Evans") // "Miles Davis"
    */
   function extractPrimaryArtist(artistString) {
     if (!artistString || typeof artistString !== 'string') {
       return '';
     }
 
-    // Split on forward slash and take the first part
-    const primaryArtist = artistString.split('/')[0].trim();
+    // Roon uses " / " (with spaces) as the collaboration separator
+    // This won't break "AC/DC" because there are no spaces around the slash
+    const COLLAB_SEPARATOR = ' / ';
 
-    return primaryArtist;
+    if (artistString.includes(COLLAB_SEPARATOR)) {
+      const primaryArtist = artistString.split(COLLAB_SEPARATOR)[0].trim();
+      return primaryArtist;
+    }
+
+    // No collaboration separator found, return the whole string
+    return artistString.trim();
   }
 
   /**
@@ -392,7 +407,20 @@
     const [profiles, setProfiles] = useState([]);
     const [currentProfile, setCurrentProfile] = useState(null);
     const [genres, setGenres] = useState([]);
-    const [busy, setBusy] = useState(false);
+
+    // Operation-specific busy states for better UX
+    const [operations, setOperations] = useState({
+      playingAlbum: false, // "Play Random Album" button
+      playingSpecificAlbum: false, // Replay from activity feed
+      fetchingArtist: false, // "More from Artist" button
+      loadingGenres: false, // Genre refresh
+      switchingProfile: false, // Profile switcher
+    });
+
+    // Helper to update specific operation state
+    const setOperation = useCallback((op, isActive) => {
+      setOperations(prev => ({ ...prev, [op]: isActive }));
+    }, []);
 
     // ==================== STATE REFRESH FUNCTIONS ====================
 
@@ -424,12 +452,15 @@
      * Refreshes the list of available genres
      */
     async function refreshGenres() {
+      setOperation('loadingGenres', true);
       try {
         console.log('[UI] refreshGenres() called');
         const genreList = await window.roon.listGenres();
         setGenres(Array.isArray(genreList) ? genreList : []);
       } catch (error) {
         console.error('Failed to list genres:', error);
+      } finally {
+        setOperation('loadingGenres', false);
       }
     }
 
@@ -498,13 +529,16 @@
      * @param {string} profileName - Profile name
      */
     async function switchProfile(profileName) {
+      setOperation('switchingProfile', true);
       try {
         await window.roon.switchProfile(profileName);
         // Genres will need to be refreshed after profile switch
-        await refreshGenres();
+        await refreshGenres(); // This will set loadingGenres
       } catch (error) {
         console.error('Failed to switch profile:', error);
         alert(`Error switching profile: ${error.message}`);
+      } finally {
+        setOperation('switchingProfile', false);
       }
     }
 
@@ -516,7 +550,7 @@
      * @returns {Promise<Object|null>} Album info or null on error
      */
     async function playRandomAlbum(selectedGenres) {
-      setBusy(true);
+      setOperation('playingAlbum', true);
       try {
         const result = await window.roon.playRandomAlbum(selectedGenres);
         return result;
@@ -525,7 +559,7 @@
         alert(`Error: ${error.message}`);
         return null;
       } finally {
-        setBusy(false);
+        setOperation('playingAlbum', false);
       }
     }
 
@@ -535,14 +569,14 @@
      * @param {string} artistName - Artist name
      */
     async function playAlbumByName(albumTitle, artistName) {
-      setBusy(true);
+      setOperation('playingSpecificAlbum', true);
       try {
         await window.roon.playAlbumByName(albumTitle, artistName);
       } catch (error) {
         console.error('Failed to play album by name:', error);
         alert(`Error: ${error.message}`);
       } finally {
-        setBusy(false);
+        setOperation('playingSpecificAlbum', false);
       }
     }
 
@@ -553,7 +587,7 @@
      * @returns {Promise<Object|null>} Album info or null on error
      */
     async function playRandomAlbumByArtist(artistName, currentAlbum) {
-      setBusy(true);
+      setOperation('fetchingArtist', true);
       try {
         return await window.roon.playRandomAlbumByArtist(
           artistName,
@@ -564,7 +598,7 @@
         alert(`Error: ${error.message}`);
         return null;
       } finally {
-        setBusy(false);
+        setOperation('fetchingArtist', false);
       }
     }
 
@@ -761,7 +795,7 @@
       profiles,
       currentProfile,
       genres,
-      busy,
+      operations,
 
       // Functions
       refreshGenres,
@@ -1212,148 +1246,92 @@
       }
     }, [currentZone?.volume?.value]);
 
-    // ==================== KEYBOARD SHORTCUTS ====================
-
-    useEffect(() => {
-      function handleKeyDown(event) {
-        // Don't trigger shortcuts when typing in inputs
-        if (
-          event.target.tagName === 'INPUT' ||
-          event.target.tagName === 'SELECT'
-        ) {
-          return;
-        }
-
-        switch (event.code) {
-          case 'Space':
-            event.preventDefault();
-            if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('playpause');
-            }
-            break;
-
-          case 'ArrowRight':
-            event.preventDefault();
-            if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('next');
-            }
-            break;
-
-          case 'ArrowLeft':
-            event.preventDefault();
-            if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('previous');
-            }
-            break;
-
-          case 'KeyR':
-            event.preventDefault();
-            if (!roon.busy && roon.state.paired && roon.state.lastZoneId) {
-              handlePlayRandomAlbum();
-            }
-            break;
-
-          case 'KeyA':
-            event.preventDefault();
-            if (
-              !roon.busy &&
-              roon.state.paired &&
-              roon.state.lastZoneId &&
-              nowPlaying.artist &&
-              nowPlaying.album
-            ) {
-              handleMoreFromArtist();
-            }
-            break;
-
-          default:
-            return;
-        }
-      }
-
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [
-      roon.busy,
-      roon.state.paired,
-      roon.state.lastZoneId,
-      nowPlaying.artist,
-      nowPlaying.album,
-      handleMoreFromArtist,
-      handlePlayRandomAlbum,
-      roon,
-    ]);
-
     // ==================== ACTIVITY HELPER FUNCTIONS ====================
 
     /**
      * Saves an activity item to persistent storage and updates UI state
+     * Memoized with useCallback to prevent unnecessary re-renders
      * @param {string} albumTitle - Album title
      * @param {string} artistName - Artist name (primary artist)
      * @param {string} imageKey - Roon image key
      * @param {string} artUrl - Album art data URL for immediate UI display
      * @param {string} playedVia - How the album was selected ('random' or 'artist')
      */
-    async function saveActivityItem(
-      albumTitle,
-      artistName,
-      imageKey,
-      artUrl,
-      playedVia = 'random'
-    ) {
-      const activityKey = createActivityKey(albumTitle, artistName);
-
-      // Create the activity item for UI (with art data URL)
-      const uiActivityItem = {
-        title: albumTitle || '—',
-        subtitle: artistName || '',
-        art: artUrl,
-        t: Date.now(),
-        key: activityKey,
-      };
-
-      // Create the activity item for persistence (with image key, not data URL)
-      const persistedActivityItem = {
-        id: null, // Will be generated by the main process
-        title: albumTitle || '—',
-        subtitle: artistName || '',
-        timestamp: Date.now(),
+    const saveActivityItem = useCallback(
+      async (
+        albumTitle,
+        artistName,
         imageKey,
-        key: activityKey,
-        playedVia,
-      };
+        artUrl,
+        playedVia = 'random'
+      ) => {
+        const activityKey = createActivityKey(albumTitle, artistName);
 
-      try {
-        // Save to persistent storage
-        const result = await window.roon.addActivity(persistedActivityItem);
+        // Create the activity item for UI (with art data URL)
+        const uiActivityItem = {
+          title: albumTitle || '—',
+          subtitle: artistName || '',
+          art: artUrl,
+          t: Date.now(),
+          key: activityKey,
+        };
 
-        // Add the generated ID to the UI item
-        if (result && result.id) {
-          uiActivityItem.id = result.id;
+        // Create the activity item for persistence (with image key, not data URL)
+        const persistedActivityItem = {
+          id: null, // Will be generated by the main process
+          title: albumTitle || '—',
+          subtitle: artistName || '',
+          timestamp: Date.now(),
+          imageKey,
+          key: activityKey,
+          playedVia,
+        };
+
+        try {
+          // Save to persistent storage
+          const result = await window.roon.addActivity(persistedActivityItem);
+
+          // Add the generated ID to the UI item
+          if (result && result.id) {
+            uiActivityItem.id = result.id;
+          }
+
+          // Update UI state immediately
+          setActivity(previousActivity =>
+            [uiActivityItem, ...previousActivity].slice(
+              0,
+              ACTIVITY_HISTORY_LIMIT
+            )
+          );
+
+          console.log(
+            '[UI] Saved activity item:',
+            albumTitle,
+            'by',
+            artistName
+          );
+        } catch (error) {
+          console.error('Failed to save activity item:', error);
+
+          // Still update UI even if persistence fails (without ID)
+          setActivity(previousActivity =>
+            [uiActivityItem, ...previousActivity].slice(
+              0,
+              ACTIVITY_HISTORY_LIMIT
+            )
+          );
         }
-
-        // Update UI state immediately
-        setActivity(previousActivity =>
-          [uiActivityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
-        );
-
-        console.log('[UI] Saved activity item:', albumTitle, 'by', artistName);
-      } catch (error) {
-        console.error('Failed to save activity item:', error);
-
-        // Still update UI even if persistence fails (without ID)
-        setActivity(previousActivity =>
-          [uiActivityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
-        );
-      }
-    }
+      },
+      [setActivity]
+    );
 
     // ==================== EVENT HANDLERS ====================
 
     /**
      * Handles Play Random Album button click
+     * Memoized with useCallback to prevent unnecessary re-renders
      */
-    async function handlePlayRandomAlbum() {
+    const handlePlayRandomAlbum = useCallback(async () => {
       // Convert selected genre names to full genre objects with album counts
       const selectedGenreObjects = selectedGenres
         .map(genreName => {
@@ -1403,12 +1381,19 @@
           'random'
         );
       }
-    }
+    }, [
+      selectedGenres,
+      subgenresCache,
+      roon.genres,
+      roon.playRandomAlbum,
+      saveActivityItem,
+    ]);
 
     /**
      * Handles More from Artist button click
+     * Memoized with useCallback to prevent unnecessary re-renders
      */
-    async function handleMoreFromArtist() {
+    const handleMoreFromArtist = useCallback(async () => {
       if (!nowPlaying.artist || !nowPlaying.album) return;
 
       // FIXED: Use only the primary artist for the search
@@ -1438,7 +1423,93 @@
           'artist'
         );
       }
-    }
+    }, [
+      nowPlaying.artist,
+      nowPlaying.album,
+      roon.playRandomAlbumByArtist,
+      saveActivityItem,
+    ]);
+
+    // ==================== KEYBOARD SHORTCUTS ====================
+
+    useEffect(() => {
+      function handleKeyDown(event) {
+        // Don't trigger shortcuts when typing in inputs
+        if (
+          event.target.tagName === 'INPUT' ||
+          event.target.tagName === 'SELECT'
+        ) {
+          return;
+        }
+
+        switch (event.code) {
+          case 'Space':
+            event.preventDefault();
+            // Transport controls are always available (independent of album operations)
+            if (roon.state.paired && roon.state.lastZoneId) {
+              roon.transportControl('playpause');
+            }
+            break;
+
+          case 'ArrowRight':
+            event.preventDefault();
+            // Transport controls are always available (independent of album operations)
+            if (roon.state.paired && roon.state.lastZoneId) {
+              roon.transportControl('next');
+            }
+            break;
+
+          case 'ArrowLeft':
+            event.preventDefault();
+            // Transport controls are always available (independent of album operations)
+            if (roon.state.paired && roon.state.lastZoneId) {
+              roon.transportControl('previous');
+            }
+            break;
+
+          case 'KeyR':
+            event.preventDefault();
+            // Only disable if this specific operation is in progress
+            if (
+              !roon.operations.playingAlbum &&
+              roon.state.paired &&
+              roon.state.lastZoneId
+            ) {
+              handlePlayRandomAlbum();
+            }
+            break;
+
+          case 'KeyA':
+            event.preventDefault();
+            // Only disable if this specific operation is in progress
+            if (
+              !roon.operations.fetchingArtist &&
+              roon.state.paired &&
+              roon.state.lastZoneId &&
+              nowPlaying.artist &&
+              nowPlaying.album
+            ) {
+              handleMoreFromArtist();
+            }
+            break;
+
+          default:
+            return;
+        }
+      }
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [
+      handlePlayRandomAlbum,
+      handleMoreFromArtist,
+      roon.operations,
+      roon.state.paired,
+      roon.state.lastZoneId,
+      roon.transportControl,
+      nowPlaying.artist,
+      nowPlaying.album,
+    ]);
 
     /**
      * Handles activity item click (replay album)
@@ -1543,7 +1614,8 @@
                   roon.profiles.find(p => p.isSelected)?.name ||
                   roon.currentProfile ||
                   '',
-                disabled: !roon.state.paired || roon.busy,
+                disabled:
+                  !roon.state.paired || roon.operations.switchingProfile,
                 onChange(event) {
                   const selectedProfileName = event.target.value;
                   if (selectedProfileName) {
@@ -1569,11 +1641,16 @@
         'button',
         {
           className: 'btn btn-primary',
-          disabled: roon.busy || !roon.state.paired || !roon.state.lastZoneId,
+          disabled:
+            roon.operations.playingAlbum ||
+            !roon.state.paired ||
+            !roon.state.lastZoneId,
           onClick: handlePlayRandomAlbum,
         },
-        roon.busy ? e('span', { className: 'spinner' }) : e(DiceIcon),
-        roon.busy ? ' Working…' : ' Play Random Album'
+        roon.operations.playingAlbum
+          ? e('span', { className: 'spinner' })
+          : e(DiceIcon),
+        roon.operations.playingAlbum ? ' Working…' : ' Play Random Album'
       )
     );
 
@@ -1639,7 +1716,7 @@
               'button',
               {
                 className: 'artist-link',
-                disabled: roon.busy || !primaryArtist,
+                disabled: roon.operations.fetchingArtist || !primaryArtist,
                 onClick: handleMoreFromArtist,
                 title: primaryArtist
                   ? `Play a different album from ${primaryArtist}`
@@ -1652,8 +1729,13 @@
                   lineHeight: 'inherit',
                   overflowWrap: 'anywhere',
                   color:
-                    primaryArtist && !roon.busy ? '#007aff' : 'var(--muted)',
-                  cursor: primaryArtist && !roon.busy ? 'pointer' : 'default',
+                    primaryArtist && !roon.operations.fetchingArtist
+                      ? '#007aff'
+                      : 'var(--muted)',
+                  cursor:
+                    primaryArtist && !roon.operations.fetchingArtist
+                      ? 'pointer'
+                      : 'default',
                   textDecoration: 'none',
                   transition: 'color 0.15s ease-in-out',
                 },

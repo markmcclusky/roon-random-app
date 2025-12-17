@@ -222,10 +222,12 @@ npm run make
 Creates platform-specific installers:
 
 **macOS:**
+
 - DMG installer (both ARM64 and Intel x64)
 - ZIP archive for manual installation
 
 **Windows:**
+
 - Setup.exe installer (Squirrel.Windows)
 - ZIP archive for portable installation
 
@@ -249,6 +251,7 @@ npm run test:ui   # Run tests with UI
 ```
 
 Test files are located in the `test/` directory and cover:
+
 - Input validation utilities
 - Roon helper functions
 - Activity management logic

@@ -50,3 +50,12 @@ config.json
 code_review.md
 feature_ideas.md
 explore-genres-output*.json
+explore-*.js
+explore-*.json
+inspect-*.js
+summarize-*.js
+roon-api-surface.*
+roon-controls-summary.json
+CODE_REVIEW_REPORT.md
+IMPLEMENTATION_PLAN.md
+REVIEW_COMPARISON.md

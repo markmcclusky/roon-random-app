@@ -9,8 +9,9 @@
  * - Session management and play history
  */
 
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
 import RoonApi from 'node-roon-api';
@@ -19,6 +20,7 @@ import RoonApiTransport from 'node-roon-api-transport';
 import RoonApiImage from 'node-roon-api-image';
 
 import { findItemCaseInsensitive, createAlbumKey } from './roonHelpers.js';
+import { LRUImageCache } from './imageCache.js';
 
 // ==================== CONSTANTS ====================
 
@@ -27,22 +29,187 @@ const MAX_RANDOM_ATTEMPTS = 50; // Maximum attempts to find unplayed album
 const BROWSE_PAGE_SIZE = 200; // Number of items to fetch per browse request
 const DEFAULT_IMAGE_SIZE = 512; // Default image dimensions
 const MAX_SESSION_HISTORY = 1000; // Maximum albums to remember in session history
+const MAX_PAGINATION_ITERATIONS = 100; // Safety limit for pagination loops
 
 // Persisted state (token) storage — lives in a writable, stable location
 const ROON_DATA_DIR = app.getPath('userData'); // e.g. ~/Library/Application Support/Roon Random App
 const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
 
-function readConfigFile() {
+// In-memory config cache for synchronous Roon API callbacks
+let configCache = null;
+let configWritePending = false;
+
+// ==================== ENCRYPTION HELPERS ====================
+
+/**
+ * Encrypts Roon tokens using OS-level encryption (macOS Keychain)
+ * @param {Object} tokens - Token object to encrypt
+ * @returns {Object} Encrypted token object with metadata
+ */
+function encryptTokens(tokens) {
+  if (!tokens || typeof tokens !== 'object') {
+    return tokens;
+  }
+
+  // Check if encryption is available
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('Encryption not available, storing tokens in plain text');
+    return tokens;
+  }
+
   try {
-    return JSON.parse(fs.readFileSync(ROON_CONFIG_PATH, 'utf8'));
-  } catch {
+    const tokensJson = JSON.stringify(tokens);
+    const encrypted = safeStorage.encryptString(tokensJson);
+
+    return {
+      _encrypted: true,
+      _version: 1,
+      data: encrypted.toString('base64'),
+    };
+  } catch (error) {
+    console.error('Failed to encrypt tokens:', error);
+    return tokens; // Fall back to plain text on error
+  }
+}
+
+/**
+ * Decrypts Roon tokens encrypted with OS-level encryption
+ * @param {Object} encryptedTokens - Encrypted token object
+ * @returns {Object} Decrypted token object
+ */
+function decryptTokens(encryptedTokens) {
+  // Not encrypted - return as-is
+  if (!encryptedTokens || !encryptedTokens._encrypted) {
+    return encryptedTokens;
+  }
+
+  // Check if encryption is available
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.error('Encryption not available, cannot decrypt tokens');
+    return null;
+  }
+
+  try {
+    const encrypted = Buffer.from(encryptedTokens.data, 'base64');
+    const decrypted = safeStorage.decryptString(encrypted);
+    return JSON.parse(decrypted);
+  } catch (error) {
+    console.error('Failed to decrypt tokens:', error);
+    return null;
+  }
+}
+
+/**
+ * Reads configuration file asynchronously
+ * @returns {Promise<Object>} Configuration object
+ */
+async function readConfigFile() {
+  try {
+    const data = await fsPromises.readFile(ROON_CONFIG_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // File doesn't exist, return empty config
+      return {};
+    }
+    console.error('Failed to read config file:', error);
     return {};
   }
 }
 
-function writeConfigFile(obj) {
-  fs.mkdirSync(ROON_DATA_DIR, { recursive: true });
-  fs.writeFileSync(ROON_CONFIG_PATH, JSON.stringify(obj, null, 2));
+/**
+ * Writes configuration file atomically to prevent corruption
+ * Uses write-to-temp-then-rename pattern for atomic operation
+ * Automatically encrypts Roon tokens using OS-level encryption
+ * @param {Object} obj - Configuration object to write
+ * @returns {Promise<void>}
+ */
+async function writeConfigFile(obj) {
+  try {
+    // Ensure directory exists
+    await fsPromises.mkdir(ROON_DATA_DIR, { recursive: true });
+
+    // Clone object to avoid mutating the original
+    const configToSave = JSON.parse(JSON.stringify(obj));
+
+    // Encrypt tokens if present
+    if (configToSave.roonstate?.tokens) {
+      configToSave.roonstate.tokens = encryptTokens(
+        configToSave.roonstate.tokens
+      );
+      console.log('Encrypted Roon tokens for storage');
+    }
+
+    // Write to temporary file first
+    const tempPath = `${ROON_CONFIG_PATH}.tmp`;
+    const content = JSON.stringify(configToSave, null, 2);
+    await fsPromises.writeFile(tempPath, content, 'utf8');
+
+    // Atomic rename (if power loss happens here, temp file exists, original is intact)
+    await fsPromises.rename(tempPath, ROON_CONFIG_PATH);
+  } catch (error) {
+    console.error('Failed to write config file:', error);
+    throw new Error(`Unable to save configuration: ${error.message}`);
+  }
+}
+
+/**
+ * Loads config cache on first access (synchronous for Roon API)
+ * Automatically decrypts encrypted tokens and migrates plain-text tokens
+ * @returns {Object} Cached configuration
+ */
+function loadConfigCacheSync() {
+  if (!configCache) {
+    // First load - must be synchronous for Roon API initialization
+    try {
+      const data = fs.readFileSync(ROON_CONFIG_PATH, 'utf8');
+      configCache = JSON.parse(data);
+
+      // Decrypt tokens if encrypted, or migrate plain-text tokens
+      if (configCache.roonstate?.tokens) {
+        const tokens = configCache.roonstate.tokens;
+
+        if (tokens._encrypted) {
+          // Already encrypted - decrypt for use
+          const decrypted = decryptTokens(tokens);
+          if (decrypted) {
+            configCache.roonstate.tokens = decrypted;
+            console.log('Decrypted Roon tokens from storage');
+          } else {
+            console.error('Failed to decrypt tokens, Roon pairing may be lost');
+            configCache.roonstate.tokens = {};
+          }
+        } else {
+          // Plain text tokens found - auto-migrate to encrypted
+          console.log(
+            '⚠️  Plain-text tokens detected, auto-migrating to encrypted storage...'
+          );
+
+          // Store original tokens
+          const plainTextTokens = { ...tokens };
+
+          // Trigger async migration (don't block startup)
+          setTimeout(() => {
+            const migratedConfig = { ...configCache };
+            migratedConfig.roonstate.tokens = plainTextTokens;
+
+            writeConfigFile(migratedConfig)
+              .then(() => {
+                console.log(
+                  '✅ Successfully migrated tokens to encrypted storage'
+                );
+              })
+              .catch(error => {
+                console.error('❌ Failed to migrate tokens:', error);
+              });
+          }, 0);
+        }
+      }
+    } catch {
+      configCache = {};
+    }
+  }
+  return configCache;
 }
 
 // Extension identification for Roon
@@ -74,6 +241,9 @@ let genresCache = null;
 let genresCacheTime = null;
 let genreFetchPromise = null; // Prevents concurrent API calls
 
+// Image caching (LRU cache for album art)
+const imageCache = new LRUImageCache(50); // Cache up to 50 images (~5MB)
+
 // Profile caching
 let profilesCache = null;
 let currentProfile = null;
@@ -81,7 +251,11 @@ let currentProfile = null;
 // Session management
 const playedThisSession = new Set();
 const artistSessionHistory = new Map();
-let isDeepDiveInProgress = false;
+
+// Artist operation queue (replaces isDeepDiveInProgress)
+const artistOperationQueue = [];
+let isProcessingArtistQueue = false;
+const MAX_ARTIST_QUEUE_SIZE = 3; // Prevent queue overflow from repeated clicks
 
 // IPC communication
 let mainWindow = null;
@@ -201,14 +375,31 @@ function connectToRoon() {
     ...EXTENSION_CONFIG,
 
     // Persist the pairing token + paired_core_id in userData/config.json
+    // These callbacks must be synchronous (Roon API requirement)
+    // We use in-memory cache and write async in background
     get_persisted_state: () => {
-      const cfg = readConfigFile();
-      return cfg.roonstate ? cfg.roonstate : {};
+      const cfg = loadConfigCacheSync();
+      return cfg.roonstate || {};
     },
     set_persisted_state: state => {
-      const all = readConfigFile();
-      all.roonstate = state; // { tokens: { [core_id]: token }, paired_core_id: "..." }
-      writeConfigFile(all);
+      // Update cache immediately (synchronous)
+      if (!configCache) {
+        configCache = {};
+      }
+      configCache.roonstate = state; // { tokens: { [core_id]: token }, paired_core_id: "..." }
+
+      // Write to disk asynchronously in background (non-blocking)
+      if (!configWritePending) {
+        configWritePending = true;
+        writeConfigFile(configCache)
+          .then(() => {
+            configWritePending = false;
+          })
+          .catch(error => {
+            console.error('Background config write failed:', error);
+            configWritePending = false;
+          });
+      }
     },
 
     core_paired: handleCorePaired,
@@ -272,6 +463,9 @@ function handleCoreUnpaired() {
   zonesRaw = [];
   profilesCache = null;
   currentProfile = null;
+
+  // Clear image cache to free memory
+  imageCache.clear();
 
   emitZones();
   emitProfiles();
@@ -608,9 +802,10 @@ export async function listGenres() {
       // Load all genres with pagination
       const genres = [];
       let offset = 0;
+      let iterations = 0;
       const albumCountRegex = /(\d+)\s+Albums?$/;
 
-      while (true) {
+      while (iterations < MAX_PAGINATION_ITERATIONS) {
         const page = await loadAsync({
           hierarchy: 'browse',
           item_key: genresNode.item_key,
@@ -638,6 +833,13 @@ export async function listGenres() {
         }
 
         offset += items.length;
+        iterations++;
+      }
+
+      if (iterations >= MAX_PAGINATION_ITERATIONS) {
+        console.warn(
+          '[listGenres] Pagination limit reached, results may be incomplete'
+        );
       }
 
       // Sort by album count (descending) and remove duplicates
@@ -705,9 +907,10 @@ export async function getSubgenres(genreTitle) {
     // Find the specific genre
     let genreItem = null;
     let offset = 0;
+    let iterations = 0;
     const targetGenreLower = genreTitle.toLowerCase();
 
-    while (!genreItem) {
+    while (!genreItem && iterations < MAX_PAGINATION_ITERATIONS) {
       const page = await loadAsync({
         hierarchy: 'browse',
         item_key: genresNode.item_key,
@@ -723,6 +926,13 @@ export async function getSubgenres(genreTitle) {
       );
 
       offset += items.length;
+      iterations++;
+    }
+
+    if (iterations >= MAX_PAGINATION_ITERATIONS && !genreItem) {
+      console.warn(
+        '[getSubgenres] Pagination limit reached while searching for genre'
+      );
     }
 
     if (!genreItem?.item_key) {
@@ -881,8 +1091,9 @@ async function navigateToGenreAlbums(root, genreFilters) {
     const parentGenreLower = targetGenre.parentGenre.toLowerCase();
     let parentGenreItem = null;
     let offset = 0;
+    let iterations = 0;
 
-    while (!parentGenreItem) {
+    while (!parentGenreItem && iterations < MAX_PAGINATION_ITERATIONS) {
       const page = await loadAsync({
         hierarchy: 'browse',
         item_key: genresNode.item_key,
@@ -898,6 +1109,13 @@ async function navigateToGenreAlbums(root, genreFilters) {
       );
 
       offset += items.length;
+      iterations++;
+    }
+
+    if (iterations >= MAX_PAGINATION_ITERATIONS && !parentGenreItem) {
+      console.warn(
+        '[navigateToGenreAlbums] Pagination limit reached while searching for parent genre'
+      );
     }
 
     if (!parentGenreItem?.item_key) {
@@ -965,8 +1183,9 @@ async function navigateToGenreAlbums(root, genreFilters) {
 
   let genreItem = null;
   let offset = 0;
+  let iterations = 0;
 
-  while (!genreItem) {
+  while (!genreItem && iterations < MAX_PAGINATION_ITERATIONS) {
     const page = await loadAsync({
       hierarchy: 'browse',
       item_key: genresNode.item_key,
@@ -986,6 +1205,13 @@ async function navigateToGenreAlbums(root, genreFilters) {
       );
 
     offset += items.length;
+    iterations++;
+  }
+
+  if (iterations >= MAX_PAGINATION_ITERATIONS && !genreItem) {
+    console.warn(
+      '[navigateToGenreAlbums] Pagination limit reached while searching for top-level genre'
+    );
   }
 
   if (!genreItem?.item_key) {
@@ -1217,8 +1443,9 @@ export async function playAlbumByName(albumName, artistName) {
   const artistNameLower = artistName.toLowerCase();
   let albumItem = null;
   let offset = 0;
+  let iterations = 0;
 
-  while (!albumItem) {
+  while (!albumItem && iterations < MAX_PAGINATION_ITERATIONS) {
     const page = await loadAsync({
       hierarchy: 'browse',
       item_key: albums.item_key,
@@ -1236,6 +1463,13 @@ export async function playAlbumByName(albumName, artistName) {
     );
 
     offset += items.length;
+    iterations++;
+  }
+
+  if (iterations >= MAX_PAGINATION_ITERATIONS && !albumItem) {
+    console.warn(
+      '[playAlbumByName] Pagination limit reached while searching for album'
+    );
   }
 
   if (!albumItem?.item_key) {
@@ -1251,130 +1485,206 @@ export async function playAlbumByName(albumName, artistName) {
 }
 
 /**
+ * Internal function that performs the actual artist album selection and playback
+ * Called by the queue processor
+ * @param {string} artistName - Artist name
+ * @param {string} currentAlbumName - Current album to exclude
+ * @returns {Promise<Object>} Result with album info
+ */
+async function performArtistAlbumSelection(artistName, currentAlbumName) {
+  if (!browseService || !transportService) {
+    throw new Error('Not connected to a Roon Core.');
+  }
+
+  const zoneId = await ensureValidZone();
+
+  // Initialize session tracking for this artist if needed
+  if (!artistSessionHistory.has(artistName)) {
+    artistSessionHistory.set(artistName, new Set());
+  }
+  const playedByArtist = artistSessionHistory.get(artistName);
+
+  // Always exclude the current album from being picked again this session
+  // (This represents the album we're trying to get away from)
+  playedByArtist.add(currentAlbumName);
+
+  // Navigate to artists list
+  await browseAsync({ hierarchy: 'browse', pop_all: true });
+  const root = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+
+  const library = findItemCaseInsensitive(root.items, 'Library');
+  await browseAsync({ hierarchy: 'browse', item_key: library.item_key });
+
+  const libraryPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+  const artists = findItemCaseInsensitive(libraryPage.items, 'Artists');
+  await browseAsync({ hierarchy: 'browse', item_key: artists.item_key });
+
+  // Find the specific artist
+  let artistItem = null;
+  let offset = 0;
+  let iterations = 0;
+  const artistNameLower = artistName.toLowerCase();
+
+  while (!artistItem && iterations < MAX_PAGINATION_ITERATIONS) {
+    const page = await loadAsync({
+      hierarchy: 'browse',
+      item_key: artists.item_key,
+      offset,
+      count: BROWSE_PAGE_SIZE,
+    });
+
+    if (!page.items || page.items.length === 0) break;
+
+    artistItem = page.items.find(
+      item => (item.title || '').toLowerCase() === artistNameLower
+    );
+
+    offset += page.items.length;
+    iterations++;
+  }
+
+  if (iterations >= MAX_PAGINATION_ITERATIONS && !artistItem) {
+    console.warn(
+      '[performArtistAlbumSelection] Pagination limit reached while searching for artist'
+    );
+  }
+
+  if (!artistItem?.item_key) {
+    throw new Error(`Artist '${artistName}' not found.`);
+  }
+
+  // Get artist's albums
+  await browseAsync({ hierarchy: 'browse', item_key: artistItem.item_key });
+  const artistPage = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: 500,
+  });
+
+  const allAlbums = (artistPage.items || []).filter(
+    item => item.hint === 'list' && item.subtitle === artistName
+  );
+
+  // Filter out albums we've played this session (including the starting album)
+  let availableAlbums = allAlbums.filter(
+    album => !playedByArtist.has(album.title)
+  );
+
+  // If no unplayed albums available, clear this artist's history and try again
+  if (availableAlbums.length === 0) {
+    playedByArtist.clear();
+
+    // Try again with cleared history
+    availableAlbums = allAlbums.filter(
+      album => album.title !== currentAlbumName
+    );
+
+    if (availableAlbums.length === 0) {
+      throw new Error(
+        `Not enough albums to pick a new one for '${artistName}'.`
+      );
+    }
+  }
+
+  // Pick and play random album
+  const selectedAlbum =
+    availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
+
+  // Mark this album as played for this artist
+  playedByArtist.add(selectedAlbum.title);
+
+  await playAlbum(selectedAlbum, zoneId);
+
+  return {
+    album: selectedAlbum.title,
+    artist: selectedAlbum.subtitle,
+    image_key: selectedAlbum.image_key,
+  };
+}
+
+/**
+ * Processes the artist operation queue sequentially
+ * Ensures only one artist operation runs at a time
+ */
+async function processArtistQueue() {
+  // Already processing or empty queue
+  if (isProcessingArtistQueue || artistOperationQueue.length === 0) {
+    return;
+  }
+
+  isProcessingArtistQueue = true;
+
+  while (artistOperationQueue.length > 0) {
+    const { artistName, currentAlbumName, resolve, reject } =
+      artistOperationQueue.shift();
+
+    console.log(
+      `[Queue] Processing artist request: ${artistName} (${artistOperationQueue.length} remaining in queue)`
+    );
+
+    try {
+      const result = await performArtistAlbumSelection(
+        artistName,
+        currentAlbumName
+      );
+      resolve(result);
+    } catch (error) {
+      console.error(
+        `[Queue] Artist operation failed for ${artistName}:`,
+        error
+      );
+      reject(error);
+    }
+  }
+
+  isProcessingArtistQueue = false;
+  console.log('[Queue] All artist operations completed');
+}
+
+/**
  * Plays a random album by a specific artist (excluding current album)
+ * Queues concurrent requests instead of silently dropping them
  * @param {string} artistName - Artist name
  * @param {string} currentAlbumName - Current album to exclude
  * @returns {Promise<Object>} Result with album info
  */
 export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
-  if (isDeepDiveInProgress) {
-    return { ignored: true };
-  }
-
-  isDeepDiveInProgress = true;
-
-  try {
-    if (!browseService || !transportService) {
-      throw new Error('Not connected to a Roon Core.');
-    }
-
-    const zoneId = await ensureValidZone();
-
-    // Initialize session tracking for this artist if needed
-    if (!artistSessionHistory.has(artistName)) {
-      artistSessionHistory.set(artistName, new Set());
-    }
-    const playedByArtist = artistSessionHistory.get(artistName);
-
-    // Always exclude the current album from being picked again this session
-    // (This represents the album we're trying to get away from)
-    playedByArtist.add(currentAlbumName);
-
-    // Navigate to artists list
-    await browseAsync({ hierarchy: 'browse', pop_all: true });
-    const root = await loadAsync({
-      hierarchy: 'browse',
-      offset: 0,
-      count: 500,
-    });
-
-    const library = findItemCaseInsensitive(root.items, 'Library');
-    await browseAsync({ hierarchy: 'browse', item_key: library.item_key });
-
-    const libraryPage = await loadAsync({
-      hierarchy: 'browse',
-      offset: 0,
-      count: 500,
-    });
-    const artists = findItemCaseInsensitive(libraryPage.items, 'Artists');
-    await browseAsync({ hierarchy: 'browse', item_key: artists.item_key });
-
-    // Find the specific artist
-    let artistItem = null;
-    let offset = 0;
-    const artistNameLower = artistName.toLowerCase();
-
-    while (!artistItem) {
-      const page = await loadAsync({
-        hierarchy: 'browse',
-        item_key: artists.item_key,
-        offset,
-        count: BROWSE_PAGE_SIZE,
-      });
-
-      if (!page.items || page.items.length === 0) break;
-
-      artistItem = page.items.find(
-        item => (item.title || '').toLowerCase() === artistNameLower
-      );
-
-      offset += page.items.length;
-    }
-
-    if (!artistItem?.item_key) {
-      throw new Error(`Artist '${artistName}' not found.`);
-    }
-
-    // Get artist's albums
-    await browseAsync({ hierarchy: 'browse', item_key: artistItem.item_key });
-    const artistPage = await loadAsync({
-      hierarchy: 'browse',
-      offset: 0,
-      count: 500,
-    });
-
-    const allAlbums = (artistPage.items || []).filter(
-      item => item.hint === 'list' && item.subtitle === artistName
+  // Check queue size to prevent overflow from repeated clicks
+  if (artistOperationQueue.length >= MAX_ARTIST_QUEUE_SIZE) {
+    console.warn(
+      `[Queue] Artist operation queue full (${MAX_ARTIST_QUEUE_SIZE} items). Rejecting new request for ${artistName}`
     );
-
-    // Filter out albums we've played this session (including the starting album)
-    let availableAlbums = allAlbums.filter(
-      album => !playedByArtist.has(album.title)
-    );
-
-    // If no unplayed albums available, clear this artist's history and try again
-    if (availableAlbums.length === 0) {
-      playedByArtist.clear();
-
-      // Try again with cleared history
-      availableAlbums = allAlbums.filter(
-        album => album.title !== currentAlbumName
-      );
-
-      if (availableAlbums.length === 0) {
-        throw new Error(
-          `Not enough albums to pick a new one for '${artistName}'.`
-        );
-      }
-    }
-
-    // Pick and play random album
-    const selectedAlbum =
-      availableAlbums[Math.floor(Math.random() * availableAlbums.length)];
-
-    // Mark this album as played for this artist
-    playedByArtist.add(selectedAlbum.title);
-
-    await playAlbum(selectedAlbum, zoneId);
-
     return {
-      album: selectedAlbum.title,
-      artist: selectedAlbum.subtitle,
-      image_key: selectedAlbum.image_key,
+      ignored: true,
+      reason: 'queue_full',
+      queueSize: artistOperationQueue.length,
     };
-  } finally {
-    isDeepDiveInProgress = false;
   }
+
+  // Add request to queue and return a promise
+  return new Promise((resolve, reject) => {
+    artistOperationQueue.push({
+      artistName,
+      currentAlbumName,
+      resolve,
+      reject,
+    });
+
+    console.log(
+      `[Queue] Added artist request to queue: ${artistName} (queue size: ${artistOperationQueue.length})`
+    );
+
+    // Start processing the queue
+    processArtistQueue();
+  });
 }
 
 // ==================== IMAGE HANDLING ====================
@@ -1386,6 +1696,18 @@ export async function playRandomAlbumByArtist(artistName, currentAlbumName) {
  * @returns {Promise<string|null>} Data URL or null
  */
 export function getImageDataUrl(imageKey, options = {}) {
+  // Check cache first (fast path)
+  const cached = imageCache.get(imageKey);
+  if (cached) {
+    console.log(`🎯 Image cache HIT: ${imageKey.substring(0, 8)}...`);
+    return Promise.resolve(cached);
+  }
+
+  // Cache miss - fetch from Roon API
+  console.log(
+    `⚡ Image cache MISS: ${imageKey.substring(0, 8)}... (fetching from Roon)`
+  );
+
   return new Promise(resolve => {
     if (!core || !imageKey) return resolve(null);
 
@@ -1406,7 +1728,15 @@ export function getImageDataUrl(imageKey, options = {}) {
         if (error || !body) return resolve(null);
 
         const base64 = Buffer.from(body).toString('base64');
-        resolve(`data:${contentType};base64,${base64}`);
+        const dataUrl = `data:${contentType};base64,${base64}`;
+
+        // Store in cache for future requests
+        imageCache.set(imageKey, dataUrl);
+        console.log(
+          `💾 Cached image: ${imageKey.substring(0, 8)}... (cache size: ${imageCache.cache.size}/${imageCache.maxSize})`
+        );
+
+        resolve(dataUrl);
       }
     );
   });
