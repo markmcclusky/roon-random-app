@@ -28,12 +28,14 @@ contextBridge.exposeInMainWorld('roon', {
 
   // Profile management
   listProfiles: () => ipcRenderer.invoke('roon:listProfiles'),
-  switchProfile: profileName => ipcRenderer.invoke('roon:switchProfile', profileName),
+  switchProfile: profileName =>
+    ipcRenderer.invoke('roon:switchProfile', profileName),
   getCurrentProfile: () => ipcRenderer.invoke('roon:getCurrentProfile'),
 
   // Activity persistence
   getActivity: () => ipcRenderer.invoke('roon:getActivity'),
-  addActivity: activityItem => ipcRenderer.invoke('roon:addActivity', activityItem),
+  addActivity: activityItem =>
+    ipcRenderer.invoke('roon:addActivity', activityItem),
   clearActivity: () => ipcRenderer.invoke('roon:clearActivity'),
   removeActivity: itemId => ipcRenderer.invoke('roon:removeActivity', itemId),
 

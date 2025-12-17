@@ -5,12 +5,16 @@ This document explains how to set up the automated GitHub Actions workflow for b
 ## Prerequisites
 
 ### 1. Apple Developer Account
+
 You need an active Apple Developer Account ($99/year) with:
+
 - **Developer ID Application Certificate** - for code signing apps distributed outside the Mac App Store
 - **App-specific password** - for notarization
 
 ### 2. Required Apple Developer Information
+
 Gather these details from your Apple Developer account:
+
 - **Apple ID** (your developer account email)
 - **Team ID** (10-character alphanumeric, found in Apple Developer Portal)
 - **Developer ID Application Certificate** (exported as .p12 file)
@@ -51,15 +55,16 @@ Gather these details from your Apple Developer account:
 2. Navigate to **Settings** > **Secrets and variables** > **Actions**
 3. Click **New repository secret** and add each of the following:
 
-| Secret Name | Value | Description |
-|-------------|--------|-------------|
-| `APPLE_CERTIFICATES` | (base64 string from Step 1) | Your code signing certificate |
-| `APPLE_CERTIFICATES_PASSWORD` | (password from Step 1) | Password for your .p12 file |
-| `APPLE_ID` | your-apple-id@email.com | Your Apple Developer account email |
-| `APPLE_ID_PASSWORD` | xxxx-xxxx-xxxx-xxxx | App-specific password from Step 2 |
-| `APPLE_TEAM_ID` | XXXXXXXXXX | Your 10-character Team ID from Step 3 |
+| Secret Name                   | Value                       | Description                           |
+| ----------------------------- | --------------------------- | ------------------------------------- |
+| `APPLE_CERTIFICATES`          | (base64 string from Step 1) | Your code signing certificate         |
+| `APPLE_CERTIFICATES_PASSWORD` | (password from Step 1)      | Password for your .p12 file           |
+| `APPLE_ID`                    | your-apple-id@email.com     | Your Apple Developer account email    |
+| `APPLE_ID_PASSWORD`           | xxxx-xxxx-xxxx-xxxx         | App-specific password from Step 2     |
+| `APPLE_TEAM_ID`               | XXXXXXXXXX                  | Your 10-character Team ID from Step 3 |
 
-**Important**: 
+**Important**:
+
 - Keep these secrets secure and never commit them to your repository
 - Use the exact secret names shown above (case-sensitive)
 - Double-check that the base64 certificate string doesn't contain line breaks
@@ -84,6 +89,7 @@ git push --tags
 ```
 
 The GitHub Actions workflow will automatically:
+
 1. Build the app for both Intel and ARM64
 2. Sign and notarize with Apple
 3. Create a GitHub release with release notes
@@ -115,29 +121,34 @@ The GitHub Actions workflow performs these steps:
 ## Build Artifacts
 
 Each release creates these files:
+
 - `Roon-Random-Album-X.X.X-arm64.dmg` - Apple Silicon installer
-- `Roon-Random-Album-X.X.X-x64.dmg` - Intel Mac installer  
+- `Roon-Random-Album-X.X.X-x64.dmg` - Intel Mac installer
 - `Roon-Random-Album-X.X.X-arm64.zip` - Apple Silicon archive
 - `Roon-Random-Album-X.X.X-x64.zip` - Intel Mac archive
 
 ## Troubleshooting
 
 ### Build Fails with Certificate Issues
+
 - Verify your `APPLE_CERTIFICATES` secret is valid base64
 - Check that `APPLE_CERTIFICATES_PASSWORD` matches your .p12 password
 - Ensure your certificate is a "Developer ID Application" certificate
 
 ### Notarization Fails
+
 - Verify `APPLE_ID` is correct
 - Check that `APPLE_ID_PASSWORD` is an app-specific password (not your regular password)
 - Confirm `APPLE_TEAM_ID` matches your Apple Developer Team ID
 
 ### No GitHub Release Created
+
 - Check that you have "Contents: write" permission on the repository
 - Verify the workflow completed all previous steps successfully
 - Look at the GitHub Actions logs for specific error messages
 
 ### Wrong Architecture Built
+
 - The workflow builds both Intel (x64) and ARM64 architectures automatically
 - If only one architecture is built, check the forge configuration
 
@@ -151,6 +162,7 @@ Each release creates these files:
 ## Local Development
 
 For local development, the signing and notarization are automatically disabled:
+
 ```bash
 npm run make  # Builds unsigned app for local testing
 npm run dev   # Runs app in development mode
