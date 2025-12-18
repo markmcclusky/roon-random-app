@@ -10,7 +10,6 @@ import {
   extractPrimaryArtist,
   formatRelativeTime,
   createActivityKey,
-  formatTime,
 } from './utils/formatting.js';
 import { DiceIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
