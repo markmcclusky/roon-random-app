@@ -29,8 +29,6 @@ const ACTIVITY_HISTORY_LIMIT = 50;
 // Timing and Delays (milliseconds)
 const CORE_PAIRING_DELAY = 500;
 const ZONE_LOAD_DELAY = 200;
-const MILLISECONDS_PER_MINUTE = 60000;
-const HOURS_PER_DAY = 24;
 
 // Layout and Spacing (pixels)
 const GENRE_ITEM_LEFT_MARGIN = 22;
