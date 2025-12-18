@@ -15,6 +15,7 @@ import { DiceIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
+import { ActivityCard } from './components/ActivityCard.js';
 
 // Ensure React and ReactDOM are available
 if (!window?.React || !window?.ReactDOM) {
@@ -1086,86 +1087,12 @@ function App() {
 
   // ==================== RENDER ACTIVITY CARD ====================
 
-  const activityCard = e(
-    'div',
-    { className: 'card activity-card' },
-    // Header with clear button
-    e(
-      'div',
-      {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-        },
-      },
-      e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Activity'),
-      e(
-        'button',
-        {
-          className: 'btn-link',
-          onClick: handleClearActivity,
-          disabled: activity.length === 0,
-          style: { transform: 'translateY(-4px)' },
-        },
-        'Clear All'
-      )
-    ),
-    e(
-      'div',
-      { className: 'activity' },
-      activity.length > 0
-        ? activity.map((item, index) => {
-            return e(
-              'button',
-              {
-                key: index,
-                className: 'item',
-                onClick: () => handleActivityItemClick(item),
-                disabled: !item.title || !item.subtitle,
-                style: {
-                  width: '100%',
-                  appearance: 'none',
-                  textAlign: 'left',
-                  cursor: item.title && item.subtitle ? 'pointer' : 'default',
-                  position: 'relative',
-                },
-              },
-              item.art
-                ? e('img', {
-                    className: 'thumb',
-                    src: item.art,
-                    alt: item.title,
-                  })
-                : e('div', { className: 'thumb' }),
-              e(
-                'div',
-                { style: { flex: 1 } },
-                e('div', { className: 'title' }, smartQuotes(item.title)),
-                e(
-                  'div',
-                  { className: 'muted' },
-                  smartQuotes(item.subtitle) || ''
-                ),
-                e('div', { className: 'time' }, formatRelativeTime(item.t))
-              ),
-              // Remove button
-              e(
-                'button',
-                {
-                  className: 'activity-remove-btn',
-                  onClick: event => handleRemoveActivity(event, item.id),
-                  title: 'Remove from activity',
-                  'aria-label': 'Remove from activity',
-                },
-                '×'
-              )
-            );
-          })
-        : e('div', { className: 'muted' }, 'No actions yet.')
-    )
-  );
+  const activityCard = e(ActivityCard, {
+    activity,
+    onItemClick: handleActivityItemClick,
+    onRemoveItem: handleRemoveActivity,
+    onClearAll: handleClearActivity,
+  });
 
   // ==================== MAIN RENDER ====================
 
