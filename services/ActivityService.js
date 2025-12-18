@@ -12,7 +12,7 @@ import {
   ACTIVITY_STORAGE_VERSION,
   ACTIVITY_CLEANUP_INTERVAL,
 } from '../activityHelpers.js';
-import { ValidationError, PersistenceError } from '../errors/AppError.js';
+import { ValidationError } from '../errors/AppError.js';
 
 /**
  * Service class for managing activity persistence and operations
