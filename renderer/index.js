@@ -12,7 +12,7 @@ import {
   createActivityKey,
   formatTime,
 } from './utils/formatting.js';
-import { DiceIcon, TriangleIcon } from './components/Icons.js';
+import { DiceIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 
