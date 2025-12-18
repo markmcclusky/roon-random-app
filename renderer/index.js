@@ -5,12 +5,7 @@
  * genre filtering, transport controls, and activity tracking.
  */
 
-import {
-  smartQuotes,
-  extractPrimaryArtist,
-  formatRelativeTime,
-  createActivityKey,
-} from './utils/formatting.js';
+import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
 import { DiceIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
