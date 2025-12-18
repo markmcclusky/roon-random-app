@@ -12,6 +12,7 @@ import {
   ACTIVITY_STORAGE_VERSION,
   ACTIVITY_CLEANUP_INTERVAL,
 } from '../activityHelpers.js';
+import { ValidationError, PersistenceError } from '../errors/AppError.js';
 
 /**
  * Service class for managing activity persistence and operations
@@ -23,7 +24,12 @@ export class ActivityService {
    */
   constructor(store) {
     if (!store) {
-      throw new Error('ActivityService requires a valid store instance');
+      throw new ValidationError(
+        'ActivityService requires a valid store instance',
+        {
+          param: 'store',
+        }
+      );
     }
     this.store = store;
   }
@@ -101,7 +107,9 @@ export class ActivityService {
   add(activityItem) {
     // Validate the activity item
     if (!isValidActivityItem(activityItem)) {
-      throw new Error('Invalid activity item structure');
+      throw new ValidationError('Invalid activity item structure', {
+        item: activityItem,
+      });
     }
 
     const data = this._getActivityData();
@@ -143,7 +151,10 @@ export class ActivityService {
    */
   remove(itemId) {
     if (!itemId || typeof itemId !== 'string') {
-      throw new Error('Invalid item ID');
+      throw new ValidationError('Invalid item ID', {
+        itemId,
+        expectedType: 'string',
+      });
     }
 
     const data = this._getActivityData();
