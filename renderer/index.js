@@ -17,7 +17,25 @@
 
   // ==================== CONSTANTS ====================
 
-  const ACTIVITY_HISTORY_LIMIT = 50; // Maximum items in activity feed
+  // Activity Feed
+  const ACTIVITY_HISTORY_LIMIT = 50;
+
+  // Timing and Delays (milliseconds)
+  const CORE_PAIRING_DELAY = 500;
+  const ZONE_LOAD_DELAY = 200;
+  const MILLISECONDS_PER_MINUTE = 60000;
+  const HOURS_PER_DAY = 24;
+
+  // Layout and Spacing (pixels)
+  const GENRE_ITEM_LEFT_MARGIN = 22;
+  const SUBGENRE_ITEM_LEFT_MARGIN = 40;
+
+  // Typography (pixels)
+  const SONG_TITLE_FONT_SIZE = 22;
+  const ARTIST_NAME_FONT_SIZE = 18;
+
+  // Volume Control (pixels)
+  const VOLUME_SLIDER_WIDTH = 210;
 
   // ==================== UTILITY FUNCTIONS ====================
 
@@ -86,15 +104,15 @@
    */
   function formatRelativeTime(timestamp) {
     const diffMs = Date.now() - timestamp;
-    const minutes = Math.round(diffMs / 60000);
+    const minutes = Math.round(diffMs / MILLISECONDS_PER_MINUTE);
 
     if (minutes < 1) return 'just now';
     if (minutes < 60) return `${minutes}m ago`;
 
     const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < HOURS_PER_DAY) return `${hours}h ago`;
 
-    const days = Math.round(hours / 24);
+    const days = Math.round(hours / HOURS_PER_DAY);
     return `${days}d ago`;
   }
 
@@ -717,7 +735,7 @@
               // Also refresh genres if not already loaded
               console.log('[UI] Core paired, loading genres...');
               await refreshGenres();
-            }, 500); // Give some time for zones to be loaded
+            }, CORE_PAIRING_DELAY);
           }
         } else if (payload.type === 'zones') {
           setZones(payload.zones || []);
@@ -734,7 +752,7 @@
                 '[UI] Zones loaded, attempting to refresh now playing...'
               );
               await refreshNowPlaying();
-            }, 200);
+            }, ZONE_LOAD_DELAY);
           }
         } else if (payload.type === 'profiles') {
           setProfiles(payload.profiles || []);
@@ -1007,7 +1025,7 @@
                     'span',
                     {
                       style: {
-                        marginLeft: '22px',
+                        marginLeft: `${GENRE_ITEM_LEFT_MARGIN}px`,
                       },
                     },
                     `${genre.title} (${genre.albumCount})`
@@ -1031,7 +1049,7 @@
                         'data-active': isSubgenreActive,
                         'data-disabled': isReloading,
                         style: {
-                          marginLeft: '40px',
+                          marginLeft: `${SUBGENRE_ITEM_LEFT_MARGIN}px`,
                           fontSize: '0.9em',
                           opacity: '0.9',
                         },
@@ -1692,7 +1710,7 @@
             'div',
             {
               style: {
-                fontSize: 22,
+                fontSize: SONG_TITLE_FONT_SIZE,
                 fontWeight: 700,
                 lineHeight: 1.12,
                 overflowWrap: 'anywhere',
@@ -1704,7 +1722,7 @@
             'div',
             {
               style: {
-                fontSize: 18,
+                fontSize: ARTIST_NAME_FONT_SIZE,
                 lineHeight: 1.12,
                 overflowWrap: 'anywhere',
                 textAlign: 'center',
@@ -1875,7 +1893,7 @@
                 onInput: event => setLocalVolume(event.target.value),
                 onChange: event => roon.changeVolume(event.target.value),
                 style: {
-                  width: '210px', // 75% of 280px
+                  width: `${VOLUME_SLIDER_WIDTH}px`,
                   transform: 'translateY(2px)', // Visual alignment with transport buttons
                   background: `linear-gradient(to right, #6b7280 0%, #6b7280 ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) 100%)`,
                 },
