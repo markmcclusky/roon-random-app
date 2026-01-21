@@ -141,7 +141,7 @@ export function ConnectionStatusDropdown({
           borderRadius: '9px',
           cursor: 'pointer',
           color: 'var(--fg)',
-          fontSize: '15px',
+          fontSize: '13px',
           fontFamily: 'inherit',
           fontWeight: 'normal',
           outline: 'none',
