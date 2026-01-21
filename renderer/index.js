@@ -6,12 +6,13 @@
  */
 
 import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
-import { DiceIcon, GearIcon } from './components/Icons.js';
+import { DiceIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
 import { ActivityCard } from './components/ActivityCard.js';
 import { ConnectionSettings } from './components/ConnectionSettings.js';
+import { ConnectionStatusDropdown } from './components/ConnectionStatusDropdown.js';
 
 // Ensure React and ReactDOM are available
 if (!window?.React || !window?.ReactDOM) {
@@ -936,6 +937,24 @@ function App() {
   }
 
   /**
+   * Handles quick mode change from dropdown (without opening modal)
+   * @param {string} mode - 'auto' or 'manual'
+   */
+  async function handleConnectionModeChange(mode) {
+    try {
+      // Update settings with new mode, keeping existing host/port for manual
+      const newSettings = {
+        ...connectionSettings,
+        mode,
+      };
+      await roon.setConnectionSettings(newSettings);
+      setConnectionSettingsState(newSettings);
+    } catch (error) {
+      console.error('Failed to change connection mode:', error);
+    }
+  }
+
+  /**
    * Handles activity item click (replay album)
    * @param {Object} activityItem - Activity item that was clicked
    */
@@ -1004,23 +1023,18 @@ function App() {
 
     e('div', { className: 'divider' }),
 
-    // Connection status
+    // Connection status dropdown
     e(
       'div',
       { className: 'seg' },
-      e('span', { className: 'muted' }, 'Core:'),
-      e(
-        'span',
-        {
-          className: roon.state.paired ? 'status-yes' : 'status-no',
-          style: {
-            fontSize: '12px',
-            verticalAlign: 'baseline',
-          },
-        },
-        '●'
-      ),
-      e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
+      e('span', { className: 'muted' }, 'Roon Server'),
+      e(ConnectionStatusDropdown, {
+        paired: roon.state.paired,
+        coreName: roon.state.coreName,
+        connectionSettings,
+        onModeChange: handleConnectionModeChange,
+        onOpenSettings: () => setShowConnectionSettings(true),
+      })
     ),
 
     e('div', { className: 'divider' }),
@@ -1056,18 +1070,6 @@ function App() {
           )
         )
       : null,
-
-    // Settings button
-    e(
-      'button',
-      {
-        className: 'btn',
-        onClick: () => setShowConnectionSettings(true),
-        title: 'Connection Settings',
-        style: { marginLeft: '8px' },
-      },
-      e(GearIcon)
-    ),
 
     e('div', { className: 'spacer' }),
 
