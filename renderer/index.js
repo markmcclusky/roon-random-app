@@ -6,11 +6,12 @@
  */
 
 import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
-import { DiceIcon } from './components/Icons.js';
+import { DiceIcon, GearIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
 import { ActivityCard } from './components/ActivityCard.js';
+import { ConnectionSettings } from './components/ConnectionSettings.js';
 
 // Ensure React and ReactDOM are available
 if (!window?.React || !window?.ReactDOM) {
@@ -181,6 +182,36 @@ function useRoon() {
       alert(`Error switching profile: ${error.message}`);
     } finally {
       setOperation('switchingProfile', false);
+    }
+  }
+
+  // ==================== CONNECTION SETTINGS FUNCTIONS ====================
+
+  /**
+   * Gets current connection settings
+   * @returns {Promise<Object>} Connection settings { mode, host, port }
+   */
+  async function getConnectionSettings() {
+    try {
+      return await window.roon.getConnectionSettings();
+    } catch (error) {
+      console.error('Failed to get connection settings:', error);
+      return { mode: 'auto', host: null, port: 9330 };
+    }
+  }
+
+  /**
+   * Updates connection settings and triggers reconnection
+   * @param {Object} settings - New connection settings { mode, host, port }
+   */
+  async function setConnectionSettings(settings) {
+    try {
+      await window.roon.setConnectionSettings(settings);
+      await window.roon.reconnect();
+      console.log('[UI] Connection settings updated, reconnecting...');
+    } catch (error) {
+      console.error('Failed to set connection settings:', error);
+      throw error;
     }
   }
 
@@ -455,6 +486,10 @@ function useRoon() {
     muteToggle, // NEW
     clearActivity, // NEW
     removeActivity, // NEW
+
+    // Connection settings
+    getConnectionSettings,
+    setConnectionSettings,
   };
 }
 
@@ -490,6 +525,23 @@ function App() {
   // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
   const [expandedGenres, setExpandedGenres] = useState(new Set());
   const [subgenresCache, setSubgenresCache] = useState(new Map());
+
+  // Connection settings modal state
+  const [showConnectionSettings, setShowConnectionSettings] = useState(false);
+  const [connectionSettings, setConnectionSettingsState] = useState({
+    mode: 'auto',
+    host: null,
+    port: 9330,
+  });
+
+  // Load connection settings on mount
+  useEffect(() => {
+    async function loadConnectionSettings() {
+      const settings = await roon.getConnectionSettings();
+      setConnectionSettingsState(settings);
+    }
+    loadConnectionSettings();
+  }, []);
 
   // Get current zone info
   const currentZone = roon.zones.find(
@@ -875,6 +927,15 @@ function App() {
   ]);
 
   /**
+   * Handles saving connection settings
+   * @param {Object} settings - New connection settings { mode, host, port }
+   */
+  async function handleSaveConnectionSettings(settings) {
+    await roon.setConnectionSettings(settings);
+    setConnectionSettingsState(settings);
+  }
+
+  /**
    * Handles activity item click (replay album)
    * @param {Object} activityItem - Activity item that was clicked
    */
@@ -996,6 +1057,18 @@ function App() {
         )
       : null,
 
+    // Settings button
+    e(
+      'button',
+      {
+        className: 'btn',
+        onClick: () => setShowConnectionSettings(true),
+        title: 'Connection Settings',
+        style: { marginLeft: '8px' },
+      },
+      e(GearIcon)
+    ),
+
     e('div', { className: 'spacer' }),
 
     // Play Random Album button
@@ -1089,6 +1162,15 @@ function App() {
     onClearAll: handleClearActivity,
   });
 
+  // ==================== RENDER CONNECTION SETTINGS MODAL ====================
+
+  const connectionSettingsModal = e(ConnectionSettings, {
+    isOpen: showConnectionSettings,
+    onClose: () => setShowConnectionSettings(false),
+    currentSettings: connectionSettings,
+    onSave: handleSaveConnectionSettings,
+  });
+
   // ==================== MAIN RENDER ====================
 
   return e(
@@ -1101,7 +1183,8 @@ function App() {
       nowPlayingCard,
       genreFilterCard,
       activityCard
-    )
+    ),
+    connectionSettingsModal
   );
 }
 

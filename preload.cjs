@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld('roon', {
   selectZone: zoneId => ipcRenderer.invoke('roon:selectZone', zoneId),
   getFilters: () => ipcRenderer.invoke('roon:getFilters'),
   setFilters: filters => ipcRenderer.invoke('roon:setFilters', filters),
+
+  // Connection settings
+  getConnectionSettings: () => ipcRenderer.invoke('roon:getConnectionSettings'),
+  setConnectionSettings: settings =>
+    ipcRenderer.invoke('roon:setConnectionSettings', settings),
+  testConnection: (host, port) =>
+    ipcRenderer.invoke('roon:testConnection', host, port),
+  reconnect: () => ipcRenderer.invoke('roon:reconnect'),
+
   listGenres: () => ipcRenderer.invoke('roon:listGenres'),
   getSubgenres: genreTitle =>
     ipcRenderer.invoke('roon:getSubgenres', genreTitle),

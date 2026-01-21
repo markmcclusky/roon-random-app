@@ -25,6 +25,12 @@ const IPC_CHANNELS = {
   GET_FILTERS: 'roon:getFilters',
   SET_FILTERS: 'roon:setFilters',
 
+  // Connection settings
+  GET_CONNECTION_SETTINGS: 'roon:getConnectionSettings',
+  SET_CONNECTION_SETTINGS: 'roon:setConnectionSettings',
+  TEST_CONNECTION: 'roon:testConnection',
+  RECONNECT: 'roon:reconnect',
+
   // Zone and playback data
   LIST_ZONES: 'roon:listZones',
   GET_ZONE_NOW_PLAYING: 'roon:getZoneNowPlaying',
@@ -126,6 +132,107 @@ function registerStateHandlers(store, mainWindow) {
     }
 
     return RoonService.setFilters(filters);
+  });
+}
+
+// ==================== CONNECTION SETTINGS HANDLERS ====================
+
+/**
+ * Registers handlers for connection settings management
+ */
+function registerConnectionHandlers() {
+  /**
+   * Gets current connection settings
+   * @returns {Object} Connection settings { mode, host, port }
+   */
+  ipcMain.handle(IPC_CHANNELS.GET_CONNECTION_SETTINGS, () => {
+    return RoonService.getConnectionSettings();
+  });
+
+  /**
+   * Updates connection settings
+   * @param {Object} settings - New connection settings { mode, host, port }
+   * @returns {Object} Updated settings
+   */
+  ipcMain.handle(IPC_CHANNELS.SET_CONNECTION_SETTINGS, (_event, settings) => {
+    // Validate settings object
+    if (!Validators.isObject(settings)) {
+      throw new Error('Invalid settings: must be an object');
+    }
+
+    // Validate mode if present
+    if (settings.mode !== undefined) {
+      if (settings.mode !== 'auto' && settings.mode !== 'manual') {
+        throw new Error("Invalid mode: must be 'auto' or 'manual'");
+      }
+    }
+
+    // Validate host if present
+    if (settings.host !== undefined && settings.host !== null) {
+      if (typeof settings.host !== 'string' || settings.host.length > 255) {
+        throw new Error(
+          'Invalid host: must be a string with max 255 characters'
+        );
+      }
+    }
+
+    // Validate port if present
+    if (settings.port !== undefined) {
+      const port = parseInt(settings.port, 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        throw new Error('Invalid port: must be a number between 1 and 65535');
+      }
+      settings.port = port;
+    }
+
+    try {
+      return RoonService.setConnectionSettings(settings);
+    } catch (error) {
+      console.error('Failed to set connection settings:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Tests a connection to a Roon Core without changing settings
+   * @param {string} host - IP address or hostname to test
+   * @param {number} port - Port number to test (default 9330)
+   * @returns {Promise<Object>} Result with success status and core info
+   */
+  ipcMain.handle(IPC_CHANNELS.TEST_CONNECTION, async (_event, host, port) => {
+    // Validate host
+    if (!Validators.isNonEmptyString(host, 255)) {
+      throw new Error(
+        'Invalid host: must be a non-empty string with max 255 characters'
+      );
+    }
+
+    // Validate and parse port
+    const portNum = port !== undefined ? parseInt(port, 10) : 9330;
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      throw new Error('Invalid port: must be a number between 1 and 65535');
+    }
+
+    try {
+      return await RoonService.testConnection(host, portNum);
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Reconnects to Roon using current settings
+   * @returns {void}
+   */
+  ipcMain.handle(IPC_CHANNELS.RECONNECT, () => {
+    try {
+      RoonService.reconnect();
+      return { success: true };
+    } catch (error) {
+      console.error('Reconnection failed:', error);
+      throw error;
+    }
   });
 }
 
@@ -627,6 +734,7 @@ export function registerIpcHandlers(store, mainWindow) {
 
   // Register all handler groups
   registerStateHandlers(store, mainWindow);
+  registerConnectionHandlers();
   registerZoneHandlers(store, mainWindow); // Updated to pass mainWindow
   registerProfileHandlers();
   registerMusicHandlers();

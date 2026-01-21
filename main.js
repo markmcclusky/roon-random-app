@@ -41,6 +41,12 @@ const STORE_DEFAULTS = {
       lastCleanup: Date.now(),
     },
   },
+  // Connection settings for manual Roon Core configuration
+  connectionSettings: {
+    mode: 'auto', // 'auto' for discovery, 'manual' for direct connection
+    host: null, // IP address or hostname for manual connection
+    port: 9330, // Default Roon Core port
+  },
 };
 
 // Security configuration for renderer process

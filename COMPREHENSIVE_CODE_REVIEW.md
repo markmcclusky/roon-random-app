@@ -21,6 +21,7 @@ This comprehensive review documents the evolution of the Roon Random Album Elect
 **Major Improvements (v1.4.0 - v1.7.0):**
 
 **v1.4.0 - v1.6.0 (Weeks 1-2):**
+
 - ✅ React Error Boundary implemented
 - ✅ Input validation across IPC handlers
 - ✅ Testing infrastructure (86 → 106 tests)
@@ -34,6 +35,7 @@ This comprehensive review documents the evolution of the Roon Random Album Elect
 - ✅ Operation-specific busy states
 
 **v1.6.9 - v1.7.0 (Code Organization Refactoring):**
+
 - ✅ Component extraction (2,040 → 200 lines in main file, 90% reduction)
 - ✅ Shared constants (zero magic numbers)
 - ✅ ActivityService (centralized management)
@@ -601,6 +603,7 @@ Implementation completed successfully with the following changes:
 5. **Cache-based Roon callbacks** - Updated `get_persisted_state` and `set_persisted_state`
 
 **Testing Results:**
+
 - ✅ App starts successfully with cached config
 - ✅ Roon Core connects and authenticates (token loading works)
 - ✅ All 86 unit tests pass
@@ -608,11 +611,13 @@ Implementation completed successfully with the following changes:
 - ✅ Config writes are async and non-blocking
 
 **Performance Impact:**
+
 - Before: 10-50ms UI freeze per config write
 - After: <1ms (cache update), async background write
 - Improvement: ~95% reduction in UI blocking time
 
 **Data Integrity:**
+
 - Atomic rename ensures either old or new file exists, never corrupted partial write
 - Crash-safe during write operations
 - Roon pairing tokens protected from corruption
@@ -765,6 +770,7 @@ function loadConfigCacheSync() {
 ✅ Backwards compatible with plain-text configs (auto-migration)
 
 **Security Improvement:**
+
 - Before: Tokens readable by any process
 - After: Tokens encrypted using OS keychain, requires user login credentials to decrypt
 
@@ -877,24 +883,17 @@ async function processArtistQueue() {
   isProcessingArtistQueue = true;
 
   while (artistOperationQueue.length > 0) {
-    const { artistName, currentAlbumName, resolve, reject } =
-      artistOperationQueue.shift();
+    const { artistName, currentAlbumName, resolve, reject } = artistOperationQueue.shift();
 
     console.log(
       `[Queue] Processing artist request: ${artistName} (${artistOperationQueue.length} remaining in queue)`
     );
 
     try {
-      const result = await performArtistAlbumSelection(
-        artistName,
-        currentAlbumName
-      );
+      const result = await performArtistAlbumSelection(artistName, currentAlbumName);
       resolve(result);
     } catch (error) {
-      console.error(
-        `[Queue] Artist operation failed for ${artistName}:`,
-        error
-      );
+      console.error(`[Queue] Artist operation failed for ${artistName}:`, error);
       reject(error);
     }
   }
@@ -1112,9 +1111,7 @@ export function getImageDataUrl(imageKey, options = {}) {
   }
 
   // Cache miss - fetch from Roon API
-  console.log(
-    `⚡ Image cache MISS: ${imageKey.substring(0, 8)}... (fetching from Roon)`
-  );
+  console.log(`⚡ Image cache MISS: ${imageKey.substring(0, 8)}... (fetching from Roon)`);
 
   return new Promise(resolve => {
     // ... fetch image from Roon API
@@ -1170,17 +1167,20 @@ function handleCoreUnpaired() {
 **Why This Isn't Actually a Problem:**
 
 **1. Single Core Reality:**
+
 - **99% of Roon users have exactly ONE Core** (their central music server)
 - Multiple Cores is extremely rare (vacation home, office/home testing scenarios)
 - When reconnecting to the **same** Core, the genre cache is still perfectly valid
 - Genres don't change frequently - libraries evolve slowly over time
 
 **2. Existing Protection Mechanisms:**
+
 - Genre cache already expires after **1 hour** (`GENRE_CACHE_DURATION = 3600 * 1000`)
 - **Profile switching already invalidates caches** (implemented at line 487 in roonService.js)
 - The actual scenario where library data differs (profile switch) is already handled properly
 
 **3. Risk Assessment:**
+
 - **Theoretical risk:** User switches between two different Cores with different music libraries
 - **Actual risk:** <1% of users ever connect to multiple Cores in practice
 - **Impact if it happens:** User sees cached genres for maximum 1 hour, then cache auto-expires
@@ -1188,12 +1188,14 @@ function handleCoreUnpaired() {
 - **Mitigation needed:** None - existing cache expiration is entirely sufficient
 
 **4. Over-Engineering Trade-off:**
+
 - Adding cache invalidation on reconnect adds complexity for negligible benefit
 - More code = more potential bugs
 - The edge case (multiple Cores) doesn't justify the maintenance burden
 
 **Verdict:**
 This is **over-engineering for a <1% edge case**. The combination of:
+
 - 1-hour automatic cache expiration
 - Profile-switch cache invalidation (already implemented)
 - Single-Core user reality (99% of users)
@@ -1232,6 +1234,7 @@ function createMainWindow() {
 ```
 
 **Why This Was a Problem:**
+
 - When the window closes, the global `mainWindow` reference stays in memory
 - Prevents garbage collection of the window object
 - Small memory leak (~few MB) that accumulates on repeated open/close
@@ -1294,6 +1297,7 @@ app.on('before-quit', () => {
 - **Logging:** Clear feedback in console
 
 **Impact:**
+
 - Prevents small memory leak on window close/reopen cycles
 - Follows Electron best practices
 - Cleaner shutdown sequence
@@ -1331,6 +1335,7 @@ async function playRandomAlbum(selectedGenres) {
 
 **User Experience Issue:**
 When clicking "Play Random Album" (takes 2-5 seconds):
+
 - ❌ **ALL** controls disabled (volume, zones, transport, etc.)
 - ❌ User feels app is frozen/unresponsive
 - ❌ Can't adjust volume during album loading
@@ -1343,11 +1348,11 @@ When clicking "Play Random Album" (takes 2-5 seconds):
 ```javascript
 // Operation-specific busy states for better UX
 const [operations, setOperations] = useState({
-  playingAlbum: false,      // "Play Random Album" button
+  playingAlbum: false, // "Play Random Album" button
   playingSpecificAlbum: false, // Replay from activity feed
-  fetchingArtist: false,    // "More from Artist" button
-  loadingGenres: false,     // Genre refresh
-  switchingProfile: false,  // Profile switcher
+  fetchingArtist: false, // "More from Artist" button
+  loadingGenres: false, // Genre refresh
+  switchingProfile: false, // Profile switcher
 });
 
 // Helper to update specific operation state
@@ -1469,6 +1474,7 @@ case 'KeyA':
 **Behavior After Fix:**
 
 **Scenario: Playing Random Album**
+
 - ❌ "Play Random Album" button: **Disabled** (shows "Working...")
 - ✅ Volume control: **Enabled** (can adjust volume!)
 - ✅ Play/Pause button: **Enabled** (can pause current song!)
@@ -1477,6 +1483,7 @@ case 'KeyA':
 - ✅ Profile dropdown: **Enabled**
 
 **Scenario: Switching Profiles**
+
 - ❌ Profile dropdown: **Disabled** (operation in progress)
 - ✅ "Play Random Album": **Enabled** (independent)
 - ✅ Volume control: **Enabled**
@@ -1745,6 +1752,7 @@ function logFatalError(error) {
 **roonService.js Test Coverage:**
 
 The new 20 tests cover:
+
 - ✅ Session history management (clearSessionHistory, idempotency)
 - ✅ Filter management (getFilters, setFilters)
 - ✅ Zone management (getZonesCache, getRawZones, setLastZone)
@@ -1758,6 +1766,7 @@ The new 20 tests cover:
 **Advanced Testing Opportunities (Future Work):**
 
 The following require complex mocking infrastructure:
+
 - 🔄 Weighted random selection with statistical validation
 - 🔄 Session history preventing duplicates (integration test)
 - 🔄 Artist operation queue sequential processing
@@ -2169,19 +2178,23 @@ src/
 **Commit:** `31a6b34` - "refactor: Extract shared constants"
 
 **Files Created:**
+
 - `renderer/constants/ui.js` - 11 UI constants (activity limits, timing, layout, typography)
 - `renderer/constants/browse.js` - 5 browse constants (pagination, genre thresholds)
 
 **Files Modified:**
+
 - `roonService.js` - Replaced hardcoded values with named imports
 - `renderer/index.js` - Replaced magic numbers with constants
 
 **Impact:**
+
 - ✅ Zero hardcoded magic numbers in core files
 - ✅ All constants centralized and documented
 - ✅ All 106 tests passing
 
 **Examples:**
+
 ```javascript
 // Before
 const BROWSE_PAGE_SIZE = 200;
@@ -2199,23 +2212,27 @@ import { BROWSE_COUNT_MEDIUM, EXPANDABLE_GENRE_MIN_ALBUMS } from './renderer/con
 **Result:** `renderer/index.js` reduced from 2,040 lines → ~200 lines (90% reduction)
 
 **2A: Utilities Module** ✅ COMPLETE
+
 - **File:** `renderer/utils/formatting.js`
 - **Extracted:** 5 utility functions (smartQuotes, extractPrimaryArtist, formatRelativeTime, createActivityKey, formatTime)
 - **Tests:** 20 tests in `test/formatting.test.js`
 - **Commit:** `d540c96` - "refactor: Extract formatting utilities"
 
 **2B: Icon Components** ✅ COMPLETE
+
 - **File:** `renderer/components/Icons.js`
 - **Extracted:** DiceIcon, TriangleIcon components
 - **Commit:** `a1e8c4f` - "refactor: Extract icon components"
 
 **2C: ErrorBoundary** ✅ COMPLETE
+
 - **File:** `renderer/components/ErrorBoundary.js`
 - **Extracted:** ErrorBoundary class component (full error handling UI)
 - **Features:** Error catching, reload functionality, crash recovery
 - **Commit:** `c5f3a72` - "refactor: Extract ErrorBoundary component"
 
 **2D: GenreFilter Component** ✅ COMPLETE
+
 - **File:** `renderer/components/GenreFilter.js`
 - **Extracted:** 259-line genre filtering component
 - **Features:** Genre toggle, expansion, clear all, reload, hierarchical display
@@ -2223,6 +2240,7 @@ import { BROWSE_COUNT_MEDIUM, EXPANDABLE_GENRE_MIN_ALBUMS } from './renderer/con
 - **Commit:** `8b9e4d5` - "refactor: Extract GenreFilter component"
 
 **2E: NowPlayingCard Component** ✅ COMPLETE
+
 - **File:** `renderer/components/NowPlayingCard.js`
 - **Extracted:** Complete Now Playing UI (~400 lines)
 - **Features:** Album art, progress bar with seek, transport controls, volume slider
@@ -2230,6 +2248,7 @@ import { BROWSE_COUNT_MEDIUM, EXPANDABLE_GENRE_MIN_ALBUMS } from './renderer/con
 - **Commit:** `7c2d1f8` - "refactor: Extract NowPlayingCard component"
 
 **2F: ActivityCard Component** ✅ COMPLETE
+
 - **File:** `renderer/components/ActivityCard.js`
 - **Extracted:** Activity feed UI (~150 lines)
 - **Features:** Item rendering, click handlers, remove/clear operations
@@ -2237,6 +2256,7 @@ import { BROWSE_COUNT_MEDIUM, EXPANDABLE_GENRE_MIN_ALBUMS } from './renderer/con
 - **Commit:** `e6a9b3c` - "refactor: Extract ActivityCard component"
 
 **Component Extraction Summary:**
+
 - ✅ 6 new component files created
 - ✅ 20 new utility tests added
 - ✅ All functionality preserved (100% feature parity)
@@ -2251,9 +2271,11 @@ import { BROWSE_COUNT_MEDIUM, EXPANDABLE_GENRE_MIN_ALBUMS } from './renderer/con
 **Commit:** `768c071` - "refactor: Implement ActivityService"
 
 **File Created:**
+
 - `services/ActivityService.js` - 189-line service class
 
 **Service Methods:**
+
 ```javascript
 class ActivityService {
   constructor(store)          // Validates store instance
@@ -2269,15 +2291,18 @@ class ActivityService {
 ```
 
 **Files Modified:**
+
 - `ipcHandlers.js` (lines 552-727) - Replaced ActivityManager object with ActivityService
 - Simplified IPC handlers to call service methods
 
 **Tests Added:**
+
 - `test/ActivityService.test.js` - 27 comprehensive tests
 - Test coverage: constructor, getAll, add, remove, clear
 - Edge cases: invalid inputs, missing data, cleanup triggers, deduplication
 
 **Impact:**
+
 - ✅ Activity management centralized in cohesive service
 - ✅ 27 new tests passing (106 → 133 total)
 - ✅ Existing 26 activity helper tests still pass
@@ -2292,9 +2317,11 @@ class ActivityService {
 **Commit:** `f90b9da` - "refactor: Add typed error classes"
 
 **File Created:**
+
 - `errors/AppError.js` - 95-line error hierarchy
 
 **Error Classes:**
+
 ```javascript
 // Base class
 class AppError extends Error {
@@ -2311,14 +2338,17 @@ class PersistenceError extends AppError   // Storage failures
 ```
 
 **Files Modified:**
+
 - `validators.js` - Throws ValidationError instead of generic Error
 - `services/ActivityService.js` - Uses ValidationError (3 locations)
 
 **Tests Added:**
+
 - `test/AppError.test.js` - 18 comprehensive tests
 - Test coverage: instantiation, inheritance, serialization, error codes, toJSON()
 
 **Benefits:**
+
 - ✅ Better error debugging (typed errors with codes)
 - ✅ Programmatic error handling (check error.code over IPC)
 - ✅ Consistent error structure across codebase
@@ -2326,6 +2356,7 @@ class PersistenceError extends AppError   // Storage failures
 - ✅ IPC-safe serialization (toJSON method)
 
 **Fix Applied:**
+
 - Removed unused `PersistenceError` import from ActivityService
 - Commit: `49d7edd` - "fix: Remove unused PersistenceError import"
 
@@ -2337,16 +2368,19 @@ class PersistenceError extends AppError   // Storage failures
 **Commit:** `1468a72` - "docs: Add comprehensive inline documentation to constants files"
 
 **Files Enhanced:**
+
 - `renderer/constants/ui.js` - Added detailed explanatory comments for all 9 constants
 - `renderer/constants/browse.js` - Enhanced comments for all 5 constants
 
 **Documentation Added:**
+
 - Purpose explanation (what it's used for)
 - Rationale for values (why that specific number)
 - Context about trade-offs and design decisions
 - Examples where helpful
 
 **Example:**
+
 ```javascript
 // Before
 export const CORE_PAIRING_DELAY = 500;
@@ -2362,6 +2396,7 @@ export const CORE_PAIRING_DELAY = 500;
 #### Refactoring Summary
 
 **Files Created:**
+
 - 2 constant files (`renderer/constants/`)
 - 6 component files (`renderer/components/`)
 - 1 utility file (`renderer/utils/formatting.js`)
@@ -2372,17 +2407,20 @@ export const CORE_PAIRING_DELAY = 500;
 **Total:** 14 new files
 
 **Test Coverage:**
+
 - Before: 106 tests
 - After: 171 tests (+65 tests, +61% increase)
 - Breakdown: +20 formatting, +27 service, +18 errors
 
 **Code Metrics:**
+
 - `renderer/index.js`: 2,040 lines → ~200 lines (90% reduction)
 - Total new code: ~1,100 lines (components, services, utilities)
 - Net reduction: ~940 lines in main file
 - Better organization: 14 focused files vs. 1 monolithic file
 
 **Quality Improvements:**
+
 - ✅ Centralized constants (no magic numbers)
 - ✅ Reusable components (easier to modify)
 - ✅ Service abstraction (activity management)
@@ -2391,6 +2429,7 @@ export const CORE_PAIRING_DELAY = 500;
 - ✅ Test coverage increase (+61%)
 
 **Branch Status:**
+
 - Branch: `refactor/code-organization`
 - Pushed to remote: ✅ Yes (December 18, 2025)
 - Test build: v1.6.9 (triggered via GitHub Actions)
@@ -2398,6 +2437,7 @@ export const CORE_PAIRING_DELAY = 500;
 - Ready for: Testing before production merge
 
 **Production Plan:**
+
 - Test v1.6.9 build thoroughly
 - Merge `refactor/code-organization` → `main`
 - Bump version to v1.7.0 (production release)
@@ -2408,6 +2448,7 @@ export const CORE_PAIRING_DELAY = 500;
 ### 🟢 Week 3-4 - Medium Priority (Partially Complete via Refactoring)
 
 **Completed via Refactoring:**
+
 - ✅ Extract React components - 12 hours (DONE - Phase 2)
 - ✅ Create shared constants file - 2 hours (DONE - Phase 1)
 - ✅ Implement ActivityService - 4 hours (DONE - Phase 3)
@@ -2427,7 +2468,6 @@ export const CORE_PAIRING_DELAY = 500;
 
 **Month 2:**
 
-- Refactor to feature-based structure
 - Add TypeScript (gradual migration)
 - Implement CI/CD improvements
 - Add performance monitoring
@@ -2445,20 +2485,21 @@ export const CORE_PAIRING_DELAY = 500;
 
 ## 📈 METRICS SUMMARY
 
-| Metric                     | Before  | Current | Target | Progress |
-| -------------------------- | ------- | ------- | ------ | -------- |
-| Critical Issues            | 7       | 0       | 0      | ✅       |
-| Significant Issues         | 5       | 0       | 0      | ✅       |
-| Test Coverage (total)      | 106     | 171     | 200+   | 🟢       |
-| Test Coverage (helpers)    | 95%     | 95%     | 95%    | ✅       |
-| Test Coverage (core)       | 0%      | 25%     | 80%    | 🟡       |
-| Security Score             | 8/10    | 10/10   | 10/10  | ✅       |
-| Code Quality               | 7/10    | 10/10   | 9/10   | ✅       |
-| Code Organization          | 5/10    | 10/10   | 9/10   | ✅       |
-| Performance                | 8/10    | 9/10    | 9/10   | ✅       |
-| Documentation              | 7/10    | 10/10   | 9/10   | ✅       |
+| Metric                  | Before | Current | Target | Progress |
+| ----------------------- | ------ | ------- | ------ | -------- |
+| Critical Issues         | 7      | 0       | 0      | ✅       |
+| Significant Issues      | 5      | 0       | 0      | ✅       |
+| Test Coverage (total)   | 106    | 171     | 200+   | 🟢       |
+| Test Coverage (helpers) | 95%    | 95%     | 95%    | ✅       |
+| Test Coverage (core)    | 0%     | 25%     | 80%    | 🟡       |
+| Security Score          | 8/10   | 10/10   | 10/10  | ✅       |
+| Code Quality            | 7/10   | 10/10   | 9/10   | ✅       |
+| Code Organization       | 5/10   | 10/10   | 9/10   | ✅       |
+| Performance             | 8/10   | 9/10    | 9/10   | ✅       |
+| Documentation           | 7/10   | 10/10   | 9/10   | ✅       |
 
 **Notes:**
+
 - ✅ All Week 1 critical issues resolved (7 of 7 - 100%)
 - ✅ All Week 2 high-priority issues resolved (5 of 5 - 100%)
 - ✅ Code organization refactoring complete (Phases 0-4 - 100%)
@@ -2658,17 +2699,17 @@ This merged review combines insights from two comprehensive analyses to provide 
 
 **Week 1 Critical Fixes - 100% COMPLETE!**
 
-*December 11, 2025 - Initial fixes:*
+_December 11, 2025 - Initial fixes:_
+
 1. ✅ **React performance patterns** - useEffect dependencies fixed, memoization implemented
 2. ✅ **Concurrency handling** - Genre cache race condition resolved
 3. ✅ **Security - CSP** - Content Security Policy verified as already implemented
 4. ✅ **Edge Cases** - Artist name parsing fixed, pagination limits added
 
-*December 17, 2025 - Final critical fixes:*
-5. ✅ **Async File I/O** - Non-blocking config reads/writes with in-memory cache
-6. ✅ **Atomic File Writes** - Temp-file-then-rename pattern prevents corruption
+_December 17, 2025 - Final critical fixes:_ 5. ✅ **Async File I/O** - Non-blocking config reads/writes with in-memory cache 6. ✅ **Atomic File Writes** - Temp-file-then-rename pattern prevents corruption
 
 **Progress Update:**
+
 - **7 of 7 Week 1 critical issues resolved** (100% complete)
 - **4 of 5 Week 2 high-priority issues resolved** (80% complete)
 - All high-priority functional bugs fixed
@@ -2688,6 +2729,7 @@ This merged review combines insights from two comprehensive analyses to provide 
 **Code Organization Refactoring: ✅ COMPLETE (Phases 0-4 done!)**
 
 **Completed Enhancements:**
+
 - ✅ Token encryption (Week 2)
 - ✅ Image LRU cache (Week 2)
 - ✅ Concurrent operation queue (Week 2)
@@ -2701,6 +2743,7 @@ This merged review combines insights from two comprehensive analyses to provide 
 - ✅ Comprehensive documentation (Refactoring)
 
 **Future Enhancements (Remaining Medium Priority):**
+
 - Advanced integration tests (weighted selection, queue behavior) - 8 hours
 - IPC integration tests - 8 hours
 - React component tests - 8 hours
@@ -2709,6 +2752,7 @@ This merged review combines insights from two comprehensive analyses to provide 
 - Accessibility improvements (ARIA labels) - 4 hours
 
 **Estimated Remaining Effort:**
+
 - ~~Week 1 completion: 4-6 hours~~ ✅ DONE
 - ~~Week 2 completion: 22 hours~~ ✅ DONE
 - ~~Code organization refactoring: 22 hours~~ ✅ DONE
@@ -2718,6 +2762,7 @@ This merged review combines insights from two comprehensive analyses to provide 
 **Current Grade: A+ (99/100)** - Up from A- (90/100) and A+ (97/100)
 
 The codebase has achieved **production-ready status** with:
+
 - ✅ Excellent test coverage (171 tests, +61% increase)
 - ✅ Perfect security score (10/10)
 - ✅ Excellent performance (9/10)
