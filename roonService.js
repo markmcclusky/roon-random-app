@@ -21,6 +21,13 @@ import RoonApiImage from 'node-roon-api-image';
 
 import { findItemCaseInsensitive, createAlbumKey } from './roonHelpers.js';
 import { LRUImageCache } from './imageCache.js';
+import {
+  BROWSE_COUNT_SMALL,
+  BROWSE_COUNT_MEDIUM,
+  BROWSE_COUNT_LARGE,
+  SUBGENRE_MIN_ALBUMS,
+  EXPANDABLE_GENRE_MIN_ALBUMS,
+} from './renderer/constants/browse.js';
 
 // ==================== CONSTANTS ====================
 
@@ -575,7 +582,7 @@ export async function listProfiles() {
     const root = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Find Settings node
@@ -588,7 +595,7 @@ export async function listProfiles() {
     const settingsItems = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Find Profile node
@@ -610,7 +617,7 @@ export async function listProfiles() {
     const profilesList = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Extract profiles
@@ -654,7 +661,7 @@ export async function switchProfile(profileName) {
     const root = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Find Settings node
@@ -667,7 +674,7 @@ export async function switchProfile(profileName) {
     const settingsItems = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Find Profile node
@@ -684,7 +691,7 @@ export async function switchProfile(profileName) {
     const profilesList = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 100,
+      count: BROWSE_COUNT_SMALL,
     });
 
     // Extract profiles from the list we already loaded
@@ -789,7 +796,7 @@ export async function listGenres() {
       const root = await loadAsync({
         hierarchy: 'browse',
         offset: 0,
-        count: 500,
+        count: BROWSE_COUNT_LARGE,
       });
 
       const genresNode = findItemCaseInsensitive(root.items, 'Genres');
@@ -826,7 +833,7 @@ export async function listGenres() {
               genres.push({
                 title: item.title.trim(),
                 albumCount,
-                expandable: albumCount >= 50, // Mark genres with 50+ albums as expandable
+                expandable: albumCount >= EXPANDABLE_GENRE_MIN_ALBUMS,
               });
             }
           }
@@ -894,7 +901,7 @@ export async function getSubgenres(genreTitle) {
     const root = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 500,
+      count: BROWSE_COUNT_LARGE,
     });
 
     const genresNode = findItemCaseInsensitive(root.items, 'Genres');
@@ -944,7 +951,7 @@ export async function getSubgenres(genreTitle) {
     const genrePage = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 500,
+      count: BROWSE_COUNT_LARGE,
     });
 
     const subGenres = [];
@@ -962,8 +969,8 @@ export async function getSubgenres(genreTitle) {
           ? parseInt(albumCountMatch[1], 10)
           : 0;
 
-        // Only include subgenres with 10+ albums
-        if (albumCount >= 10) {
+        // Only include subgenres with minimum album count
+        if (albumCount >= SUBGENRE_MIN_ALBUMS) {
           subGenres.push({
             title: item.title,
             albumCount,
@@ -1043,7 +1050,11 @@ async function ensureValidZone() {
  */
 async function navigateToAlbumList(genreFilters) {
   await browseAsync({ hierarchy: 'browse', pop_all: true });
-  const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+  const root = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: BROWSE_COUNT_LARGE,
+  });
 
   if (Array.isArray(genreFilters) && genreFilters.length > 0) {
     return await navigateToGenreAlbums(root, genreFilters);
@@ -1130,7 +1141,7 @@ async function navigateToGenreAlbums(root, genreFilters) {
     const parentPage = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 500,
+      count: BROWSE_COUNT_LARGE,
     });
 
     // Find the subgenre
@@ -1154,7 +1165,7 @@ async function navigateToGenreAlbums(root, genreFilters) {
     const subgenrePage = await loadAsync({
       hierarchy: 'browse',
       offset: 0,
-      count: 500,
+      count: BROWSE_COUNT_LARGE,
     });
 
     // Look for Albums section within the subgenre
@@ -1222,7 +1233,7 @@ async function navigateToGenreAlbums(root, genreFilters) {
   const genrePage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
 
   // Look for Albums section within the genre
@@ -1254,7 +1265,7 @@ async function navigateToLibraryAlbums(root) {
   const libraryPage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
 
   const albums = findItemCaseInsensitive(libraryPage.items, 'Albums');
@@ -1347,7 +1358,7 @@ async function playAlbum(album, zoneId) {
   const albumPage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 200,
+    count: BROWSE_COUNT_MEDIUM,
   });
 
   // Try to get album art
@@ -1417,7 +1428,11 @@ export async function playAlbumByName(albumName, artistName) {
 
   // Navigate to main albums list
   await browseAsync({ hierarchy: 'browse', pop_all: true });
-  const root = await loadAsync({ hierarchy: 'browse', offset: 0, count: 500 });
+  const root = await loadAsync({
+    hierarchy: 'browse',
+    offset: 0,
+    count: BROWSE_COUNT_LARGE,
+  });
 
   const library = findItemCaseInsensitive(root.items, 'Library');
   if (!library?.item_key) {
@@ -1428,7 +1443,7 @@ export async function playAlbumByName(albumName, artistName) {
   const libraryPage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
 
   const albums = findItemCaseInsensitive(libraryPage.items, 'Albums');
@@ -1513,7 +1528,7 @@ async function performArtistAlbumSelection(artistName, currentAlbumName) {
   const root = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
 
   const library = findItemCaseInsensitive(root.items, 'Library');
@@ -1522,7 +1537,7 @@ async function performArtistAlbumSelection(artistName, currentAlbumName) {
   const libraryPage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
   const artists = findItemCaseInsensitive(libraryPage.items, 'Artists');
   await browseAsync({ hierarchy: 'browse', item_key: artists.item_key });
@@ -1566,7 +1581,7 @@ async function performArtistAlbumSelection(artistName, currentAlbumName) {
   const artistPage = await loadAsync({
     hierarchy: 'browse',
     offset: 0,
-    count: 500,
+    count: BROWSE_COUNT_LARGE,
   });
 
   const allAlbums = (artistPage.items || []).filter(

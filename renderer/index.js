@@ -5,2035 +5,1106 @@
  * genre filtering, transport controls, and activity tracking.
  */
 
-// Self-executing function to avoid global scope pollution
-(function () {
-  // Ensure React and ReactDOM are available
-  if (!window?.React || !window?.ReactDOM) {
-    throw new Error('React/ReactDOM not found.');
-  }
+import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
+import { DiceIcon } from './components/Icons.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { GenreFilter } from './components/GenreFilter.js';
+import { NowPlayingCard } from './components/NowPlayingCard.js';
+import { ActivityCard } from './components/ActivityCard.js';
 
-  const { createElement: e, useState, useEffect, useCallback } = React;
-  const root = document.getElementById('root');
+// Ensure React and ReactDOM are available
+if (!window?.React || !window?.ReactDOM) {
+  throw new Error('React/ReactDOM not found.');
+}
 
-  // ==================== CONSTANTS ====================
+const { createElement: e, useState, useEffect, useCallback } = React;
+const root = document.getElementById('root');
 
-  const ACTIVITY_HISTORY_LIMIT = 50; // Maximum items in activity feed
+// ==================== CONSTANTS ====================
 
-  // ==================== UTILITY FUNCTIONS ====================
+// Activity Feed
+const ACTIVITY_HISTORY_LIMIT = 50;
+
+// Timing and Delays (milliseconds)
+const CORE_PAIRING_DELAY = 500;
+const ZONE_LOAD_DELAY = 200;
+
+// ==================== CUSTOM HOOKS ====================
+
+/**
+ * Main hook for Roon integration and state management
+ * Handles connection state, zones, genres, and playback operations
+ * @returns {Object} Roon state and operation functions
+ */
+function useRoon() {
+  // Core state
+  const [state, setState] = useState({
+    paired: false,
+    coreName: null,
+    lastZoneId: null,
+    filters: { genres: [] },
+  });
+
+  const [zones, setZones] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [currentProfile, setCurrentProfile] = useState(null);
+  const [genres, setGenres] = useState([]);
+
+  // Operation-specific busy states for better UX
+  const [operations, setOperations] = useState({
+    playingAlbum: false, // "Play Random Album" button
+    playingSpecificAlbum: false, // Replay from activity feed
+    fetchingArtist: false, // "More from Artist" button
+    loadingGenres: false, // Genre refresh
+    switchingProfile: false, // Profile switcher
+  });
+
+  // Helper to update specific operation state
+  const setOperation = useCallback((op, isActive) => {
+    setOperations(prev => ({ ...prev, [op]: isActive }));
+  }, []);
+
+  // ==================== STATE REFRESH FUNCTIONS ====================
 
   /**
-   * Converts straight quotes and apostrophes to smart/curly equivalents
-   * for better typography
-   * @param {string} text - Text to convert
-   * @returns {string} Text with smart quotes and apostrophes
+   * Refreshes the current Roon state from the main process
    */
-  function smartQuotes(text) {
-    if (!text || typeof text !== 'string') {
-      return text;
+  async function refreshState() {
+    try {
+      const currentState = await window.roon.getState();
+      setState(currentState);
+    } catch (error) {
+      console.error('Failed to get Roon state:', error);
     }
-
-    return (
-      text
-        // Replace straight apostrophes with right single quotation marks
-        .replace(/'/g, '\u2019')
-        // Replace straight quotes with smart quotes
-        // Opening quote: quote at start or after whitespace
-        .replace(/(^|[\s()[\]{])"/g, '$1\u201C')
-        // Closing quote: all remaining quotes
-        .replace(/"/g, '\u201D')
-    );
   }
 
   /**
-   * Extracts the primary artist name from a compound artist string
-   * Roon often sends artist names like "Lou Donaldson / Leon Spencer" or
-   * "Miles Davis / John Coltrane / Bill Evans" for collaborations.
-   * This function returns just the first (primary) artist name.
-   *
-   * Note: Roon uses " / " (space-slash-space) as the collaboration separator,
-   * not just "/" - this prevents breaking artist names like "AC/DC"
-   *
-   * @param {string} artistString - Full artist string from Roon
-   * @returns {string} Primary artist name
-   *
-   * @example
-   * extractPrimaryArtist("Lou Donaldson / Leon Spencer") // "Lou Donaldson"
-   * extractPrimaryArtist("AC/DC") // "AC/DC"
-   * extractPrimaryArtist("Miles Davis / John Coltrane / Bill Evans") // "Miles Davis"
+   * Refreshes the list of available zones
    */
-  function extractPrimaryArtist(artistString) {
-    if (!artistString || typeof artistString !== 'string') {
-      return '';
+  async function refreshZones() {
+    try {
+      const zoneList = await window.roon.listZones();
+      setZones(Array.isArray(zoneList) ? zoneList : []);
+    } catch (error) {
+      console.error('Failed to list zones:', error);
     }
+  }
 
-    // Roon uses " / " (with spaces) as the collaboration separator
-    // This won't break "AC/DC" because there are no spaces around the slash
-    const COLLAB_SEPARATOR = ' / ';
-
-    if (artistString.includes(COLLAB_SEPARATOR)) {
-      const primaryArtist = artistString.split(COLLAB_SEPARATOR)[0].trim();
-      return primaryArtist;
+  /**
+   * Refreshes the list of available genres
+   */
+  async function refreshGenres() {
+    setOperation('loadingGenres', true);
+    try {
+      console.log('[UI] refreshGenres() called');
+      const genreList = await window.roon.listGenres();
+      setGenres(Array.isArray(genreList) ? genreList : []);
+    } catch (error) {
+      console.error('Failed to list genres:', error);
+    } finally {
+      setOperation('loadingGenres', false);
     }
-
-    // No collaboration separator found, return the whole string
-    return artistString.trim();
   }
 
   /**
-   * Formats a timestamp as relative time (e.g., "5m ago", "2h ago", "3d ago")
-   * @param {number} timestamp - Unix timestamp in milliseconds
-   * @returns {string} Formatted relative time string
+   * NEW: Refreshes now playing information for the current zone
    */
-  function formatRelativeTime(timestamp) {
-    const diffMs = Date.now() - timestamp;
-    const minutes = Math.round(diffMs / 60000);
-
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
-
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-
-    const days = Math.round(hours / 24);
-    return `${days}d ago`;
-  }
-
-  /**
-   * Creates a unique key for tracking albums in activity
-   * @param {string} album - Album title
-   * @param {string} artist - Artist name
-   * @returns {string} Unique album key
-   */
-  function createActivityKey(album, artist) {
-    return [album || '', artist || ''].join('||');
-  }
-
-  /**
-   * Formats seconds into MM:SS or M:SS time format
-   * @param {number} seconds - Time in seconds
-   * @returns {string} Formatted time string
-   */
-  function formatTime(seconds) {
-    if (!seconds || seconds < 0) return '0:00';
-
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  }
-
-  // ==================== ICON COMPONENTS ====================
-
-  /**
-   * Dice icon component for the Play Random Album button
-   * @param {Object} props - SVG props
-   * @returns {React.Element} Dice icon SVG
-   */
-  function DiceIcon(props) {
-    return e(
-      'svg',
-      Object.assign(
-        {
-          width: 16,
-          height: 16,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-        },
-        props
-      ),
-      e('rect', {
-        x: 3,
-        y: 3,
-        width: 18,
-        height: 18,
-        rx: 4,
-        stroke: 'currentColor',
-        'stroke-width': 1.6,
-      }),
-      e('circle', { cx: 8, cy: 8, r: 1.4, fill: 'currentColor' }),
-      e('circle', { cx: 16, cy: 16, r: 1.4, fill: 'currentColor' }),
-      e('circle', { cx: 16, cy: 8, r: 1.4, fill: 'currentColor' }),
-      e('circle', { cx: 8, cy: 16, r: 1.4, fill: 'currentColor' }),
-      e('circle', { cx: 12, cy: 12, r: 1.4, fill: 'currentColor' })
-    );
-  }
-
-  /**
-   * Triangle icon for expandable genre indicators
-   * @param {Object} props - SVG props including expanded state
-   * @returns {React.Element} Triangle icon SVG
-   */
-  function TriangleIcon({ expanded, ...props }) {
-    return e(
-      'svg',
-      Object.assign(
-        {
-          width: 12,
-          height: 12,
-          viewBox: '0 0 12 12',
-          fill: 'currentColor',
-          style: {
-            transition: 'transform 0.2s ease',
-            transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-          },
-        },
-        props
-      ),
-      e('path', {
-        d: 'M4 2.5L8.5 6L4 9.5V2.5Z',
-        fill: 'currentColor',
-      })
-    );
-  }
-
-  // ==================== ERROR BOUNDARY COMPONENT ====================
-
-  /**
-   * Error Boundary component that catches React errors and displays a fallback UI
-   * Prevents the entire app from crashing when a component error occurs
-   */
-  class ErrorBoundary extends React.Component {
-    constructor(props) {
-      super(props);
-      this.state = {
-        hasError: false,
-        error: null,
-        errorInfo: null,
-        showDetails: false,
-      };
+  async function refreshNowPlaying() {
+    try {
+      const nowPlaying = await window.roon.refreshNowPlaying();
+      console.log('[UI] Refreshed now playing:', nowPlaying);
+      return nowPlaying;
+    } catch (error) {
+      console.error('Failed to refresh now playing:', error);
+      return null;
     }
+  }
 
-    static getDerivedStateFromError(_error) {
-      // Update state so the next render will show the fallback UI
-      return { hasError: true };
+  /**
+   * Refreshes the list of available profiles
+   */
+  async function refreshProfiles() {
+    try {
+      const profileList = await window.roon.listProfiles();
+      setProfiles(Array.isArray(profileList) ? profileList : []);
+
+      // Set current profile from the selected one
+      const selectedProfile = profileList?.find(p => p.isSelected);
+      if (selectedProfile) {
+        setCurrentProfile(selectedProfile.name);
+      }
+    } catch (error) {
+      console.error('Failed to list profiles:', error);
     }
+  }
 
-    componentDidCatch(error, errorInfo) {
-      // Log the error to console for debugging
-      console.error('Error Boundary caught an error:', error, errorInfo);
+  // ==================== SETTINGS FUNCTIONS ====================
 
-      // Store error details in state
-      this.setState({
-        error,
-        errorInfo,
-      });
+  /**
+   * Updates genre filter settings
+   * @param {Object} newFilters - New filter configuration
+   */
+  async function setFilters(newFilters) {
+    try {
+      await window.roon.setFilters(newFilters || {});
+      await refreshState();
+    } catch (error) {
+      console.error('Failed to set filters:', error);
     }
+  }
 
-    handleReload = () => {
-      // Reset error boundary state and reload
-      this.setState({
-        hasError: false,
-        error: null,
-        errorInfo: null,
-        showDetails: false,
-      });
-    };
+  /**
+   * Selects a different output zone
+   * @param {string} zoneId - Zone identifier
+   */
+  async function selectZone(zoneId) {
+    try {
+      await window.roon.selectZone(zoneId);
+      await refreshState();
+    } catch (error) {
+      console.error('Failed to select zone:', error);
+    }
+  }
 
-    toggleDetails = () => {
-      this.setState(prevState => ({ showDetails: !prevState.showDetails }));
-    };
+  /**
+   * Switches to a different profile
+   * @param {string} profileName - Profile name
+   */
+  async function switchProfile(profileName) {
+    setOperation('switchingProfile', true);
+    try {
+      await window.roon.switchProfile(profileName);
+      // Genres will need to be refreshed after profile switch
+      await refreshGenres(); // This will set loadingGenres
+    } catch (error) {
+      console.error('Failed to switch profile:', error);
+      alert(`Error switching profile: ${error.message}`);
+    } finally {
+      setOperation('switchingProfile', false);
+    }
+  }
 
-    render() {
-      if (this.state.hasError) {
-        // Fallback UI
-        return e(
-          'div',
-          {
-            style: {
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100vh',
-              padding: '40px',
-              backgroundColor: '#1a1a1a',
-              color: '#ffffff',
-              fontFamily:
-                '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            },
-          },
-          e(
-            'div',
-            {
-              style: {
-                backgroundColor: '#2a2a2a',
-                padding: '32px',
-                borderRadius: '8px',
-                maxWidth: '600px',
-                width: '100%',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-              },
-            },
-            e(
-              'h1',
-              {
-                style: {
-                  margin: '0 0 16px 0',
-                  fontSize: '24px',
-                  fontWeight: '600',
-                  color: '#ff6b6b',
-                },
-              },
-              'Something Went Wrong'
-            ),
-            e(
-              'p',
-              {
-                style: {
-                  margin: '0 0 24px 0',
-                  fontSize: '16px',
-                  lineHeight: '1.5',
-                  color: '#cccccc',
-                },
-              },
-              'The application encountered an unexpected error. You can reload the app to try again.'
-            ),
-            e(
-              'div',
-              {
-                style: {
-                  display: 'flex',
-                  gap: '12px',
-                  marginBottom: '16px',
-                },
-              },
-              e(
-                'button',
-                {
-                  onClick: this.handleReload,
-                  style: {
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#ffffff',
-                    backgroundColor: '#4CAF50',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                  },
-                  onMouseEnter: e => {
-                    e.target.style.backgroundColor = '#45a049';
-                  },
-                  onMouseLeave: e => {
-                    e.target.style.backgroundColor = '#4CAF50';
-                  },
-                },
-                'Reload App'
-              ),
-              e(
-                'button',
-                {
-                  onClick: this.toggleDetails,
-                  style: {
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#ffffff',
-                    backgroundColor: '#555555',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                  },
-                  onMouseEnter: e => {
-                    e.target.style.backgroundColor = '#666666';
-                  },
-                  onMouseLeave: e => {
-                    e.target.style.backgroundColor = '#555555';
-                  },
-                },
-                this.state.showDetails ? 'Hide Details' : 'View Details'
-              )
-            ),
-            this.state.showDetails &&
-              e(
-                'div',
-                {
-                  style: {
-                    marginTop: '16px',
-                    padding: '16px',
-                    backgroundColor: '#1a1a1a',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    color: '#ff9999',
-                    overflow: 'auto',
-                    maxHeight: '300px',
-                  },
-                },
-                e(
-                  'div',
-                  {
-                    style: { marginBottom: '12px', fontWeight: 'bold' },
-                  },
-                  'Error Details:'
-                ),
-                e('div', null, this.state.error && this.state.error.toString()),
-                this.state.errorInfo &&
-                  e(
-                    'div',
-                    {
-                      style: { marginTop: '12px', whiteSpace: 'pre-wrap' },
-                    },
-                    this.state.errorInfo.componentStack
-                  )
-              )
-          )
+  // ==================== PLAYBACK FUNCTIONS ====================
+
+  /**
+   * Plays a random album based on current genre filters
+   * @param {Array} selectedGenres - Array of selected genre names
+   * @returns {Promise<Object|null>} Album info or null on error
+   */
+  async function playRandomAlbum(selectedGenres) {
+    setOperation('playingAlbum', true);
+    try {
+      const result = await window.roon.playRandomAlbum(selectedGenres);
+      return result;
+    } catch (error) {
+      console.error('Failed to play random album:', error);
+      alert(`Error: ${error.message}`);
+      return null;
+    } finally {
+      setOperation('playingAlbum', false);
+    }
+  }
+
+  /**
+   * Plays a specific album by name and artist
+   * @param {string} albumTitle - Album title
+   * @param {string} artistName - Artist name
+   */
+  async function playAlbumByName(albumTitle, artistName) {
+    setOperation('playingSpecificAlbum', true);
+    try {
+      await window.roon.playAlbumByName(albumTitle, artistName);
+    } catch (error) {
+      console.error('Failed to play album by name:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setOperation('playingSpecificAlbum', false);
+    }
+  }
+
+  /**
+   * Plays a random album by the specified artist (excluding current album)
+   * @param {string} artistName - Artist name
+   * @param {string} currentAlbum - Current album to exclude
+   * @returns {Promise<Object|null>} Album info or null on error
+   */
+  async function playRandomAlbumByArtist(artistName, currentAlbum) {
+    setOperation('fetchingArtist', true);
+    try {
+      return await window.roon.playRandomAlbumByArtist(
+        artistName,
+        currentAlbum
+      );
+    } catch (error) {
+      console.error('Failed to play album by artist:', error);
+      alert(`Error: ${error.message}`);
+      return null;
+    } finally {
+      setOperation('fetchingArtist', false);
+    }
+  }
+
+  // ==================== TRANSPORT FUNCTIONS ====================
+
+  /**
+   * Sends transport control commands (play, pause, next, previous)
+   * @param {string} action - Transport action to perform
+   */
+  async function transportControl(action) {
+    try {
+      await window.roon.transportControl(action);
+    } catch (error) {
+      console.error('Transport control failed:', error);
+    }
+  }
+
+  /**
+   * Changes the volume of the current zone
+   * @param {number} value - New volume value
+   */
+  async function changeVolume(value) {
+    try {
+      await window.roon.changeVolume(value);
+    } catch (error) {
+      console.error('Volume change failed:', error);
+    }
+  }
+
+  /**
+   * Seeks to a specific position in the current track
+   * @param {number} seconds - Target position in seconds
+   */
+  async function seek(seconds) {
+    try {
+      await window.roon.seek(seconds);
+    } catch (error) {
+      console.error('Seek failed:', error);
+    }
+  }
+
+  // ==================== INITIALIZATION ====================
+
+  useEffect(() => {
+    let hasTriedInitialNowPlaying = false;
+
+    // Initial data loading
+    (async function () {
+      console.log('[TIMING] 🚀 App initialization started');
+      console.time('[TIMING] Total initialization');
+
+      console.time('[TIMING] refreshState');
+      await refreshState();
+      console.timeEnd('[TIMING] refreshState');
+
+      console.time('[TIMING] refreshZones');
+      await refreshZones();
+      console.timeEnd('[TIMING] refreshZones');
+
+      // Only load profiles/genres if core is already paired
+      // Otherwise, handleCorePaired will load them when connection happens
+      const currentState = await window.roon.getState();
+      if (currentState.paired) {
+        console.log(
+          '[TIMING] Core already paired, loading profiles and genres'
         );
-      }
 
-      return this.props.children;
-    }
-  }
+        console.time('[TIMING] refreshProfiles');
+        await refreshProfiles();
+        console.timeEnd('[TIMING] refreshProfiles');
 
-  // ==================== CUSTOM HOOKS ====================
+        console.time('[TIMING] refreshGenres');
+        await refreshGenres();
+        console.timeEnd('[TIMING] refreshGenres');
 
-  /**
-   * Main hook for Roon integration and state management
-   * Handles connection state, zones, genres, and playback operations
-   * @returns {Object} Roon state and operation functions
-   */
-  function useRoon() {
-    // Core state
-    const [state, setState] = useState({
-      paired: false,
-      coreName: null,
-      lastZoneId: null,
-      filters: { genres: [] },
-    });
-
-    const [zones, setZones] = useState([]);
-    const [profiles, setProfiles] = useState([]);
-    const [currentProfile, setCurrentProfile] = useState(null);
-    const [genres, setGenres] = useState([]);
-
-    // Operation-specific busy states for better UX
-    const [operations, setOperations] = useState({
-      playingAlbum: false, // "Play Random Album" button
-      playingSpecificAlbum: false, // Replay from activity feed
-      fetchingArtist: false, // "More from Artist" button
-      loadingGenres: false, // Genre refresh
-      switchingProfile: false, // Profile switcher
-    });
-
-    // Helper to update specific operation state
-    const setOperation = useCallback((op, isActive) => {
-      setOperations(prev => ({ ...prev, [op]: isActive }));
-    }, []);
-
-    // ==================== STATE REFRESH FUNCTIONS ====================
-
-    /**
-     * Refreshes the current Roon state from the main process
-     */
-    async function refreshState() {
-      try {
-        const currentState = await window.roon.getState();
-        setState(currentState);
-      } catch (error) {
-        console.error('Failed to get Roon state:', error);
-      }
-    }
-
-    /**
-     * Refreshes the list of available zones
-     */
-    async function refreshZones() {
-      try {
-        const zoneList = await window.roon.listZones();
-        setZones(Array.isArray(zoneList) ? zoneList : []);
-      } catch (error) {
-        console.error('Failed to list zones:', error);
-      }
-    }
-
-    /**
-     * Refreshes the list of available genres
-     */
-    async function refreshGenres() {
-      setOperation('loadingGenres', true);
-      try {
-        console.log('[UI] refreshGenres() called');
-        const genreList = await window.roon.listGenres();
-        setGenres(Array.isArray(genreList) ? genreList : []);
-      } catch (error) {
-        console.error('Failed to list genres:', error);
-      } finally {
-        setOperation('loadingGenres', false);
-      }
-    }
-
-    /**
-     * NEW: Refreshes now playing information for the current zone
-     */
-    async function refreshNowPlaying() {
-      try {
-        const nowPlaying = await window.roon.refreshNowPlaying();
-        console.log('[UI] Refreshed now playing:', nowPlaying);
-        return nowPlaying;
-      } catch (error) {
-        console.error('Failed to refresh now playing:', error);
-        return null;
-      }
-    }
-
-    /**
-     * Refreshes the list of available profiles
-     */
-    async function refreshProfiles() {
-      try {
-        const profileList = await window.roon.listProfiles();
-        setProfiles(Array.isArray(profileList) ? profileList : []);
-
-        // Set current profile from the selected one
-        const selectedProfile = profileList?.find(p => p.isSelected);
-        if (selectedProfile) {
-          setCurrentProfile(selectedProfile.name);
-        }
-      } catch (error) {
-        console.error('Failed to list profiles:', error);
-      }
-    }
-
-    // ==================== SETTINGS FUNCTIONS ====================
-
-    /**
-     * Updates genre filter settings
-     * @param {Object} newFilters - New filter configuration
-     */
-    async function setFilters(newFilters) {
-      try {
-        await window.roon.setFilters(newFilters || {});
-        await refreshState();
-      } catch (error) {
-        console.error('Failed to set filters:', error);
-      }
-    }
-
-    /**
-     * Selects a different output zone
-     * @param {string} zoneId - Zone identifier
-     */
-    async function selectZone(zoneId) {
-      try {
-        await window.roon.selectZone(zoneId);
-        await refreshState();
-      } catch (error) {
-        console.error('Failed to select zone:', error);
-      }
-    }
-
-    /**
-     * Switches to a different profile
-     * @param {string} profileName - Profile name
-     */
-    async function switchProfile(profileName) {
-      setOperation('switchingProfile', true);
-      try {
-        await window.roon.switchProfile(profileName);
-        // Genres will need to be refreshed after profile switch
-        await refreshGenres(); // This will set loadingGenres
-      } catch (error) {
-        console.error('Failed to switch profile:', error);
-        alert(`Error switching profile: ${error.message}`);
-      } finally {
-        setOperation('switchingProfile', false);
-      }
-    }
-
-    // ==================== PLAYBACK FUNCTIONS ====================
-
-    /**
-     * Plays a random album based on current genre filters
-     * @param {Array} selectedGenres - Array of selected genre names
-     * @returns {Promise<Object|null>} Album info or null on error
-     */
-    async function playRandomAlbum(selectedGenres) {
-      setOperation('playingAlbum', true);
-      try {
-        const result = await window.roon.playRandomAlbum(selectedGenres);
-        return result;
-      } catch (error) {
-        console.error('Failed to play random album:', error);
-        alert(`Error: ${error.message}`);
-        return null;
-      } finally {
-        setOperation('playingAlbum', false);
-      }
-    }
-
-    /**
-     * Plays a specific album by name and artist
-     * @param {string} albumTitle - Album title
-     * @param {string} artistName - Artist name
-     */
-    async function playAlbumByName(albumTitle, artistName) {
-      setOperation('playingSpecificAlbum', true);
-      try {
-        await window.roon.playAlbumByName(albumTitle, artistName);
-      } catch (error) {
-        console.error('Failed to play album by name:', error);
-        alert(`Error: ${error.message}`);
-      } finally {
-        setOperation('playingSpecificAlbum', false);
-      }
-    }
-
-    /**
-     * Plays a random album by the specified artist (excluding current album)
-     * @param {string} artistName - Artist name
-     * @param {string} currentAlbum - Current album to exclude
-     * @returns {Promise<Object|null>} Album info or null on error
-     */
-    async function playRandomAlbumByArtist(artistName, currentAlbum) {
-      setOperation('fetchingArtist', true);
-      try {
-        return await window.roon.playRandomAlbumByArtist(
-          artistName,
-          currentAlbum
-        );
-      } catch (error) {
-        console.error('Failed to play album by artist:', error);
-        alert(`Error: ${error.message}`);
-        return null;
-      } finally {
-        setOperation('fetchingArtist', false);
-      }
-    }
-
-    // ==================== TRANSPORT FUNCTIONS ====================
-
-    /**
-     * Sends transport control commands (play, pause, next, previous)
-     * @param {string} action - Transport action to perform
-     */
-    async function transportControl(action) {
-      try {
-        await window.roon.transportControl(action);
-      } catch (error) {
-        console.error('Transport control failed:', error);
-      }
-    }
-
-    /**
-     * Changes the volume of the current zone
-     * @param {number} value - New volume value
-     */
-    async function changeVolume(value) {
-      try {
-        await window.roon.changeVolume(value);
-      } catch (error) {
-        console.error('Volume change failed:', error);
-      }
-    }
-
-    /**
-     * Seeks to a specific position in the current track
-     * @param {number} seconds - Target position in seconds
-     */
-    async function seek(seconds) {
-      try {
-        await window.roon.seek(seconds);
-      } catch (error) {
-        console.error('Seek failed:', error);
-      }
-    }
-
-    // ==================== INITIALIZATION ====================
-
-    useEffect(() => {
-      let hasTriedInitialNowPlaying = false;
-
-      // Initial data loading
-      (async function () {
-        console.log('[TIMING] 🚀 App initialization started');
-        console.time('[TIMING] Total initialization');
-
-        console.time('[TIMING] refreshState');
-        await refreshState();
-        console.timeEnd('[TIMING] refreshState');
-
-        console.time('[TIMING] refreshZones');
-        await refreshZones();
-        console.timeEnd('[TIMING] refreshZones');
-
-        // Only load profiles/genres if core is already paired
-        // Otherwise, handleCorePaired will load them when connection happens
-        const currentState = await window.roon.getState();
-        if (currentState.paired) {
+        // Also load Now Playing if we have a zone selected (prevents race condition)
+        if (currentState.lastZoneId) {
           console.log(
-            '[TIMING] Core already paired, loading profiles and genres'
+            '[TIMING] Loading initial Now Playing for zone:',
+            currentState.lastZoneId
           );
+          console.time('[TIMING] refreshNowPlaying');
+          await refreshNowPlaying();
+          console.timeEnd('[TIMING] refreshNowPlaying');
+        }
+      } else {
+        console.log(
+          '[TIMING] Core not paired yet, will load profiles/genres after pairing'
+        );
+      }
 
-          console.time('[TIMING] refreshProfiles');
-          await refreshProfiles();
-          console.timeEnd('[TIMING] refreshProfiles');
+      console.timeEnd('[TIMING] Total initialization');
+      console.log('[TIMING] ✅ App initialization complete');
+    })();
 
-          console.time('[TIMING] refreshGenres');
-          await refreshGenres();
-          console.timeEnd('[TIMING] refreshGenres');
+    // Set up event listener for real-time updates
+    const unsubscribe = window.roon.onEvent(payload => {
+      if (!payload) return;
 
-          // Also load Now Playing if we have a zone selected (prevents race condition)
-          if (currentState.lastZoneId) {
+      if (payload.type === 'core') {
+        setState(prevState => ({
+          ...prevState,
+          paired: payload.status === 'paired',
+          coreName: payload.coreDisplayName,
+        }));
+
+        // When core becomes paired, load genres and try to get initial now playing
+        if (payload.status === 'paired' && !hasTriedInitialNowPlaying) {
+          hasTriedInitialNowPlaying = true;
+          setTimeout(async () => {
             console.log(
-              '[TIMING] Loading initial Now Playing for zone:',
-              currentState.lastZoneId
+              '[UI] Core paired, attempting to refresh now playing...'
             );
-            console.time('[TIMING] refreshNowPlaying');
             await refreshNowPlaying();
-            console.timeEnd('[TIMING] refreshNowPlaying');
-          }
-        } else {
-          console.log(
-            '[TIMING] Core not paired yet, will load profiles/genres after pairing'
-          );
+
+            // Also refresh genres if not already loaded
+            console.log('[UI] Core paired, loading genres...');
+            await refreshGenres();
+          }, CORE_PAIRING_DELAY);
         }
+      } else if (payload.type === 'zones') {
+        setZones(payload.zones || []);
 
-        console.timeEnd('[TIMING] Total initialization');
-        console.log('[TIMING] ✅ App initialization complete');
-      })();
-
-      // Set up event listener for real-time updates
-      const unsubscribe = window.roon.onEvent(payload => {
-        if (!payload) return;
-
-        if (payload.type === 'core') {
-          setState(prevState => ({
-            ...prevState,
-            paired: payload.status === 'paired',
-            coreName: payload.coreDisplayName,
-          }));
-
-          // When core becomes paired, load genres and try to get initial now playing
-          if (payload.status === 'paired' && !hasTriedInitialNowPlaying) {
-            hasTriedInitialNowPlaying = true;
-            setTimeout(async () => {
-              console.log(
-                '[UI] Core paired, attempting to refresh now playing...'
-              );
-              await refreshNowPlaying();
-
-              // Also refresh genres if not already loaded
-              console.log('[UI] Core paired, loading genres...');
-              await refreshGenres();
-            }, 500); // Give some time for zones to be loaded
-          }
-        } else if (payload.type === 'zones') {
-          setZones(payload.zones || []);
-
-          // When zones are first loaded, try to get now playing if we haven't already
-          if (
-            !hasTriedInitialNowPlaying &&
-            payload.zones &&
-            payload.zones.length > 0
-          ) {
-            hasTriedInitialNowPlaying = true;
-            setTimeout(async () => {
-              console.log(
-                '[UI] Zones loaded, attempting to refresh now playing...'
-              );
-              await refreshNowPlaying();
-            }, 200);
-          }
-        } else if (payload.type === 'profiles') {
-          setProfiles(payload.profiles || []);
-          setCurrentProfile(payload.currentProfile || null);
+        // When zones are first loaded, try to get now playing if we haven't already
+        if (
+          !hasTriedInitialNowPlaying &&
+          payload.zones &&
+          payload.zones.length > 0
+        ) {
+          hasTriedInitialNowPlaying = true;
+          setTimeout(async () => {
+            console.log(
+              '[UI] Zones loaded, attempting to refresh now playing...'
+            );
+            await refreshNowPlaying();
+          }, ZONE_LOAD_DELAY);
         }
-      });
-
-      // Cleanup: remove event listener when component unmounts
-      return () => {
-        if (unsubscribe) unsubscribe();
-      };
-    }, []);
-
-    // ==================== ACTIVITY FUNCTIONS ====================
-
-    /**
-     * Clears all activity items from both UI and persistent storage
-     */
-    async function clearActivity() {
-      try {
-        await window.roon.clearActivity();
-        console.log('[UI] Cleared persistent activity');
-      } catch (error) {
-        console.error('Failed to clear persistent activity:', error);
+      } else if (payload.type === 'profiles') {
+        setProfiles(payload.profiles || []);
+        setCurrentProfile(payload.currentProfile || null);
       }
-    }
-
-    /**
-     * Removes a single activity item by ID
-     * @param {string} itemId - ID of the activity item to remove
-     */
-    async function removeActivity(itemId) {
-      try {
-        await window.roon.removeActivity(itemId);
-        console.log('[UI] Removed activity item:', itemId);
-      } catch (error) {
-        console.error('Failed to remove activity item:', error);
-      }
-    }
-
-    /**
-     * Toggles mute state for the current zone's output
-     */
-    async function muteToggle() {
-      try {
-        await window.roon.muteToggle();
-        console.log('[UI] Mute toggle requested');
-      } catch (error) {
-        console.error('Failed to toggle mute:', error);
-      }
-    }
-
-    // Return public API
-    return {
-      // State
-      state,
-      zones,
-      profiles,
-      currentProfile,
-      genres,
-      operations,
-
-      // Functions
-      refreshGenres,
-      refreshProfiles,
-      refreshNowPlaying, // NEW
-      setFilters,
-      selectZone,
-      switchProfile,
-      playRandomAlbum,
-      playAlbumByName,
-      playRandomAlbumByArtist,
-      transportControl,
-      seek,
-      changeVolume,
-      muteToggle, // NEW
-      clearActivity, // NEW
-      removeActivity, // NEW
-    };
-  }
-
-  // ==================== GENRE FILTER COMPONENT ====================
-
-  /**
-   * Genre selection component with toggle switches
-   * @param {Object} props - Component props
-   * @param {Array} props.allGenres - All available genres
-   * @param {Array} props.selectedGenres - Currently selected genres
-   * @param {Function} props.setSelectedGenres - Genre selection setter
-   * @param {Object} props.roon - Roon hook instance
-   * @returns {React.Element} Genre filter component
-   */
-  function GenreFilter(props) {
-    const {
-      allGenres,
-      selectedGenres,
-      setSelectedGenres,
-      roon,
-      expandedGenres,
-      setExpandedGenres,
-      subgenresCache,
-      setSubgenresCache,
-    } = props;
-    const [isReloading, setIsReloading] = useState(false);
-
-    /**
-     * Toggles selection state of a genre
-     * @param {string} genreTitle - Genre title to toggle
-     */
-    function toggleGenre(genreTitle) {
-      if (isReloading) return;
-
-      setSelectedGenres(previousSelection => {
-        const selectionSet = new Set(previousSelection);
-
-        if (selectionSet.has(genreTitle)) {
-          selectionSet.delete(genreTitle);
-        } else {
-          selectionSet.add(genreTitle);
-        }
-
-        return Array.from(selectionSet);
-      });
-    }
-
-    /**
-     * Clears all genre selections
-     */
-    async function clearAllSelections() {
-      setSelectedGenres([]);
-    }
-
-    /**
-     * Toggles expansion state of a genre and loads subgenres if needed
-     * @param {string} genreTitle - Genre title to expand/collapse
-     */
-    async function toggleExpansion(genreTitle, event) {
-      event.stopPropagation(); // Prevent genre selection toggle
-
-      setExpandedGenres(prev => {
-        const newExpanded = new Set(prev);
-
-        if (newExpanded.has(genreTitle)) {
-          // Collapsing
-          newExpanded.delete(genreTitle);
-        } else {
-          // Expanding - load subgenres if not cached
-          newExpanded.add(genreTitle);
-
-          if (!subgenresCache.has(genreTitle)) {
-            loadSubgenres(genreTitle);
-          }
-        }
-
-        return newExpanded;
-      });
-    }
-
-    /**
-     * Loads subgenres for a specific genre
-     * @param {string} genreTitle - Genre to load subgenres for
-     */
-    async function loadSubgenres(genreTitle) {
-      try {
-        const subgenres = await window.roon.getSubgenres(genreTitle);
-        setSubgenresCache(prev => new Map(prev.set(genreTitle, subgenres)));
-      } catch (error) {
-        console.error(`Failed to load subgenres for ${genreTitle}:`, error);
-        setSubgenresCache(prev => new Map(prev.set(genreTitle, [])));
-      }
-    }
-
-    /**
-     * Reloads the genre list from Roon
-     */
-    async function reloadGenres() {
-      setIsReloading(true);
-      try {
-        await roon.refreshGenres();
-        // Clear expansion state and cache when reloading
-        setExpandedGenres(new Set());
-        setSubgenresCache(new Map());
-      } finally {
-        setIsReloading(false);
-      }
-    }
-
-    return e(
-      'div',
-      { className: 'card activity-card genre-filter-card' },
-      // Header with reload button
-      e(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          },
-        },
-        e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Filter by Genre'),
-        e(
-          'button',
-          {
-            className: 'btn-link',
-            onClick: reloadGenres,
-            disabled: isReloading,
-            style: { transform: 'translateY(-4px)' },
-          },
-          isReloading ? 'Reloading…' : 'Reload Genres'
-        )
-      ),
-
-      // Scrollable genre list
-      e(
-        'div',
-        { className: 'genre-card-content' },
-        e(
-          'div',
-          { className: 'toggle-list' },
-          allGenres
-            .map(genre => {
-              const isActive = selectedGenres.includes(genre.title);
-              const isExpanded = expandedGenres.has(genre.title);
-              const subgenres = subgenresCache.get(genre.title) || [];
-
-              // Create genre items array starting with the main genre
-              const items = [
-                e(
-                  'div',
-                  {
-                    key: genre.title,
-                    className: 'toggle-item',
-                    onClick: () => toggleGenre(genre.title),
-                    'data-active': isActive,
-                    'data-disabled': isReloading,
-                    style: { position: 'relative' },
-                  },
-                  // Expansion triangle (only for expandable genres)
-                  genre.expandable
-                    ? e(
-                        'div',
-                        {
-                          className: 'expansion-triangle',
-                          onClick: event => toggleExpansion(genre.title, event),
-                          style: {
-                            position: 'absolute',
-                            left: '2px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            cursor: 'pointer',
-                            padding: '2px',
-                            color: 'var(--muted)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          },
-                        },
-                        e(TriangleIcon, {
-                          expanded: isExpanded,
-                          width: 18,
-                          height: 18,
-                        })
-                      )
-                    : null,
-
-                  // Genre text with consistent left padding for all genres
-                  e(
-                    'span',
-                    {
-                      style: {
-                        marginLeft: '22px',
-                      },
-                    },
-                    `${genre.title} (${genre.albumCount})`
-                  )
-                ),
-              ];
-
-              // Add subgenres if expanded
-              if (isExpanded && subgenres.length > 0) {
-                subgenres.forEach(subgenre => {
-                  const subgenreKey = `${genre.title}::${subgenre.title}`;
-                  const isSubgenreActive = selectedGenres.includes(subgenreKey);
-
-                  items.push(
-                    e(
-                      'div',
-                      {
-                        key: subgenreKey,
-                        className: 'toggle-item subgenre-item',
-                        onClick: () => toggleGenre(subgenreKey),
-                        'data-active': isSubgenreActive,
-                        'data-disabled': isReloading,
-                        style: {
-                          marginLeft: '40px',
-                          fontSize: '0.9em',
-                          opacity: '0.9',
-                        },
-                      },
-                      e(
-                        'span',
-                        null,
-                        `${subgenre.title} (${subgenre.albumCount})`
-                      )
-                    )
-                  );
-                });
-              }
-
-              return items;
-            })
-            .flat() // Flatten the array since each genre can return multiple items
-        )
-      ),
-
-      // Clear button
-      e(
-        'div',
-        {
-          className: 'row',
-          style: {
-            marginTop: 'auto',
-            paddingTop: '16px',
-            flexShrink: 0,
-          },
-        },
-        e(
-          'button',
-          {
-            className: 'btn',
-            onClick: clearAllSelections,
-            disabled: isReloading || selectedGenres.length === 0,
-          },
-          'Clear Selections'
-        )
-      )
-    );
-  }
-
-  // ==================== MAIN APPLICATION COMPONENT ====================
-
-  /**
-   * Main application component
-   * @returns {React.Element} Complete application UI
-   */
-  function App() {
-    const roon = useRoon();
-
-    // Now Playing state
-    const [nowPlaying, setNowPlaying] = useState({
-      song: null,
-      artist: null,
-      album: null,
-      art: null,
-      seek_position: null,
-      length: null,
-      lastUpdate: null, // Timestamp for progress interpolation
     });
 
-    // Activity feed state
-    const [activity, setActivity] = useState([]);
+    // Cleanup: remove event listener when component unmounts
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
 
-    // Volume control state
-    const [localVolume, setLocalVolume] = useState(null);
+  // ==================== ACTIVITY FUNCTIONS ====================
 
-    // Genre selection state
-    const [selectedGenres, setSelectedGenres] = useState([]);
+  /**
+   * Clears all activity items from both UI and persistent storage
+   */
+  async function clearActivity() {
+    try {
+      await window.roon.clearActivity();
+      console.log('[UI] Cleared persistent activity');
+    } catch (error) {
+      console.error('Failed to clear persistent activity:', error);
+    }
+  }
 
-    // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
-    const [expandedGenres, setExpandedGenres] = useState(new Set());
-    const [subgenresCache, setSubgenresCache] = useState(new Map());
+  /**
+   * Removes a single activity item by ID
+   * @param {string} itemId - ID of the activity item to remove
+   */
+  async function removeActivity(itemId) {
+    try {
+      await window.roon.removeActivity(itemId);
+      console.log('[UI] Removed activity item:', itemId);
+    } catch (error) {
+      console.error('Failed to remove activity item:', error);
+    }
+  }
 
-    // Get current zone info
-    const currentZone = roon.zones.find(
-      zone => zone.id === roon.state.lastZoneId
-    );
+  /**
+   * Toggles mute state for the current zone's output
+   */
+  async function muteToggle() {
+    try {
+      await window.roon.muteToggle();
+      console.log('[UI] Mute toggle requested');
+    } catch (error) {
+      console.error('Failed to toggle mute:', error);
+    }
+  }
 
-    // ==================== NOW PLAYING EVENT HANDLER ====================
+  // Return public API
+  return {
+    // State
+    state,
+    zones,
+    profiles,
+    currentProfile,
+    genres,
+    operations,
 
-    useEffect(() => {
-      function handleNowPlayingEvent(payload) {
-        if (payload.type !== 'nowPlaying') return;
-        if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
+    // Functions
+    refreshGenres,
+    refreshProfiles,
+    refreshNowPlaying, // NEW
+    setFilters,
+    selectZone,
+    switchProfile,
+    playRandomAlbum,
+    playAlbumByName,
+    playRandomAlbumByArtist,
+    transportControl,
+    seek,
+    changeVolume,
+    muteToggle, // NEW
+    clearActivity, // NEW
+    removeActivity, // NEW
+  };
+}
 
-        const metadata = payload.meta || {};
+// ==================== MAIN APPLICATION COMPONENT ====================
 
-        if (metadata.image_key) {
-          // Fetch album art
-          window.roon.getImage(metadata.image_key).then(dataUrl => {
-            if (dataUrl) {
-              setNowPlaying({
-                song: metadata.song,
-                artist: metadata.artist, // Keep full artist for display
-                album: metadata.album,
-                art: dataUrl,
-                seek_position: metadata.seek_position,
-                length: metadata.length,
-                lastUpdate: Date.now(),
-              });
-            }
-          });
-        } else {
-          // Update without changing existing art
-          setNowPlaying(previous => {
-            return {
+/**
+ * Main application component
+ * @returns {React.Element} Complete application UI
+ */
+function App() {
+  const roon = useRoon();
+
+  // Now Playing state
+  const [nowPlaying, setNowPlaying] = useState({
+    song: null,
+    artist: null,
+    album: null,
+    art: null,
+    seek_position: null,
+    length: null,
+    lastUpdate: null, // Timestamp for progress interpolation
+  });
+
+  // Activity feed state
+  const [activity, setActivity] = useState([]);
+
+  // Volume control state
+  const [localVolume, setLocalVolume] = useState(null);
+
+  // Genre selection state
+  const [selectedGenres, setSelectedGenres] = useState([]);
+
+  // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
+  const [expandedGenres, setExpandedGenres] = useState(new Set());
+  const [subgenresCache, setSubgenresCache] = useState(new Map());
+
+  // Get current zone info
+  const currentZone = roon.zones.find(
+    zone => zone.id === roon.state.lastZoneId
+  );
+
+  // ==================== NOW PLAYING EVENT HANDLER ====================
+
+  useEffect(() => {
+    function handleNowPlayingEvent(payload) {
+      if (payload.type !== 'nowPlaying') return;
+      if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
+
+      const metadata = payload.meta || {};
+
+      if (metadata.image_key) {
+        // Fetch album art
+        window.roon.getImage(metadata.image_key).then(dataUrl => {
+          if (dataUrl) {
+            setNowPlaying({
               song: metadata.song,
               artist: metadata.artist, // Keep full artist for display
               album: metadata.album,
-              art: previous.art,
+              art: dataUrl,
               seek_position: metadata.seek_position,
               length: metadata.length,
               lastUpdate: Date.now(),
-            };
-          });
-        }
-      }
-
-      const unsubscribe = window.roon.onEvent(handleNowPlayingEvent);
-
-      // Cleanup: remove event listener when zone changes or component unmounts
-      return () => {
-        if (unsubscribe) unsubscribe();
-      };
-    }, [roon.state.lastZoneId]);
-
-    // ==================== SEEK POSITION EVENT HANDLER ====================
-
-    useEffect(() => {
-      function handleSeekPositionEvent(payload) {
-        if (payload.type !== 'seekPosition') return;
-        if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
-
-        // Update only the seek position in nowPlaying state
-        setNowPlaying(previous => ({
-          ...previous,
-          seek_position: payload.seek_position,
-        }));
-      }
-
-      const unsubscribe = window.roon.onEvent(handleSeekPositionEvent);
-
-      // Cleanup: remove event listener when zone changes or component unmounts
-      return () => {
-        if (unsubscribe) unsubscribe();
-      };
-    }, [roon.state.lastZoneId]);
-
-    // ==================== ACTIVITY PERSISTENCE ====================
-
-    useEffect(() => {
-      async function loadPersistedActivity() {
-        try {
-          const persistedActivity = await window.roon.getActivity();
-          console.log(
-            '[UI] Loaded persisted activity:',
-            persistedActivity?.length || 0,
-            'items'
-          );
-
-          // Convert persisted activity to UI format (with album art)
-          const activityWithArt = await Promise.all(
-            (persistedActivity || [])
-              .slice(0, ACTIVITY_HISTORY_LIMIT)
-              .map(async item => {
-                let artUrl = null;
-
-                // Fetch album art if we have an image key
-                if (item.imageKey) {
-                  try {
-                    artUrl = await window.roon.getImage(item.imageKey);
-                  } catch (error) {
-                    console.warn(
-                      `Failed to load album art for ${item.title}:`,
-                      error
-                    );
-                  }
-                }
-
-                return {
-                  id: item.id, // Preserve ID for removal
-                  title: item.title,
-                  subtitle: item.subtitle,
-                  art: artUrl,
-                  t: item.timestamp,
-                  key: item.key || createActivityKey(item.title, item.subtitle),
-                };
-              })
-          );
-
-          setActivity(activityWithArt);
-        } catch (error) {
-          console.error('Failed to load persisted activity:', error);
-          setActivity([]);
-        }
-      }
-
-      loadPersistedActivity();
-    }, []);
-
-    // ==================== VOLUME SYNC ====================
-
-    useEffect(() => {
-      if (currentZone?.volume) {
-        setLocalVolume(currentZone.volume.value);
+            });
+          }
+        });
       } else {
-        setLocalVolume(null);
+        // Update without changing existing art
+        setNowPlaying(previous => {
+          return {
+            song: metadata.song,
+            artist: metadata.artist, // Keep full artist for display
+            album: metadata.album,
+            art: previous.art,
+            seek_position: metadata.seek_position,
+            length: metadata.length,
+            lastUpdate: Date.now(),
+          };
+        });
       }
-    }, [currentZone?.volume?.value]);
-
-    // ==================== ACTIVITY HELPER FUNCTIONS ====================
-
-    /**
-     * Saves an activity item to persistent storage and updates UI state
-     * Memoized with useCallback to prevent unnecessary re-renders
-     * @param {string} albumTitle - Album title
-     * @param {string} artistName - Artist name (primary artist)
-     * @param {string} imageKey - Roon image key
-     * @param {string} artUrl - Album art data URL for immediate UI display
-     * @param {string} playedVia - How the album was selected ('random' or 'artist')
-     */
-    const saveActivityItem = useCallback(
-      async (
-        albumTitle,
-        artistName,
-        imageKey,
-        artUrl,
-        playedVia = 'random'
-      ) => {
-        const activityKey = createActivityKey(albumTitle, artistName);
-
-        // Create the activity item for UI (with art data URL)
-        const uiActivityItem = {
-          title: albumTitle || '—',
-          subtitle: artistName || '',
-          art: artUrl,
-          t: Date.now(),
-          key: activityKey,
-        };
-
-        // Create the activity item for persistence (with image key, not data URL)
-        const persistedActivityItem = {
-          id: null, // Will be generated by the main process
-          title: albumTitle || '—',
-          subtitle: artistName || '',
-          timestamp: Date.now(),
-          imageKey,
-          key: activityKey,
-          playedVia,
-        };
-
-        try {
-          // Save to persistent storage
-          const result = await window.roon.addActivity(persistedActivityItem);
-
-          // Add the generated ID to the UI item
-          if (result && result.id) {
-            uiActivityItem.id = result.id;
-          }
-
-          // Update UI state immediately
-          setActivity(previousActivity =>
-            [uiActivityItem, ...previousActivity].slice(
-              0,
-              ACTIVITY_HISTORY_LIMIT
-            )
-          );
-
-          console.log(
-            '[UI] Saved activity item:',
-            albumTitle,
-            'by',
-            artistName
-          );
-        } catch (error) {
-          console.error('Failed to save activity item:', error);
-
-          // Still update UI even if persistence fails (without ID)
-          setActivity(previousActivity =>
-            [uiActivityItem, ...previousActivity].slice(
-              0,
-              ACTIVITY_HISTORY_LIMIT
-            )
-          );
-        }
-      },
-      [setActivity]
-    );
-
-    // ==================== EVENT HANDLERS ====================
-
-    /**
-     * Handles Play Random Album button click
-     * Memoized with useCallback to prevent unnecessary re-renders
-     */
-    const handlePlayRandomAlbum = useCallback(async () => {
-      // Convert selected genre names to full genre objects with album counts
-      const selectedGenreObjects = selectedGenres
-        .map(genreName => {
-          // Check if this is a subgenre (contains ::)
-          if (genreName.includes('::')) {
-            const [parentGenre, subgenreTitle] = genreName.split('::');
-            const subgenres = subgenresCache.get(parentGenre) || [];
-            const subgenreObj = subgenres.find(
-              sg => sg.title === subgenreTitle
-            );
-            if (!subgenreObj) {
-              console.warn(
-                `Subgenre "${subgenreTitle}" not found in ${parentGenre}`
-              );
-              return null;
-            }
-            return { ...subgenreObj, isSubgenre: true };
-          } else {
-            // Regular top-level genre
-            const genreObj = roon.genres.find(g => g.title === genreName);
-            if (!genreObj) {
-              console.warn(`Genre "${genreName}" not found in genre list`);
-              return null;
-            }
-            return { ...genreObj, isSubgenre: false };
-          }
-        })
-        .filter(Boolean); // Remove any null entries
-
-      console.log('[UI] Sending genre objects:', selectedGenreObjects);
-
-      const result = await roon.playRandomAlbum(selectedGenreObjects);
-
-      if (result && !result.ignored) {
-        // Use primary artist for activity tracking
-        const primaryArtist = extractPrimaryArtist(result.artist);
-        const artUrl = result.image_key
-          ? await window.roon.getImage(result.image_key)
-          : null;
-
-        // Save to persistent storage and update UI
-        await saveActivityItem(
-          result.album,
-          primaryArtist,
-          result.image_key,
-          artUrl,
-          'random'
-        );
-      }
-    }, [
-      selectedGenres,
-      subgenresCache,
-      roon.genres,
-      roon.playRandomAlbum,
-      saveActivityItem,
-    ]);
-
-    /**
-     * Handles More from Artist button click
-     * Memoized with useCallback to prevent unnecessary re-renders
-     */
-    const handleMoreFromArtist = useCallback(async () => {
-      if (!nowPlaying.artist || !nowPlaying.album) return;
-
-      // FIXED: Use only the primary artist for the search
-      const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
-      console.log(
-        `[More from Artist] Full artist: "${nowPlaying.artist}" -> Primary: "${primaryArtist}"`
-      );
-
-      const result = await roon.playRandomAlbumByArtist(
-        primaryArtist,
-        nowPlaying.album
-      );
-
-      if (result && !result.ignored) {
-        // Use primary artist for activity tracking too
-        const resultPrimaryArtist = extractPrimaryArtist(result.artist);
-        const artUrl = result.image_key
-          ? await window.roon.getImage(result.image_key)
-          : null;
-
-        // Save to persistent storage and update UI
-        await saveActivityItem(
-          result.album,
-          resultPrimaryArtist,
-          result.image_key,
-          artUrl,
-          'artist'
-        );
-      }
-    }, [
-      nowPlaying.artist,
-      nowPlaying.album,
-      roon.playRandomAlbumByArtist,
-      saveActivityItem,
-    ]);
-
-    // ==================== KEYBOARD SHORTCUTS ====================
-
-    useEffect(() => {
-      function handleKeyDown(event) {
-        // Don't trigger shortcuts when typing in inputs
-        if (
-          event.target.tagName === 'INPUT' ||
-          event.target.tagName === 'SELECT'
-        ) {
-          return;
-        }
-
-        switch (event.code) {
-          case 'Space':
-            event.preventDefault();
-            // Transport controls are always available (independent of album operations)
-            if (roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('playpause');
-            }
-            break;
-
-          case 'ArrowRight':
-            event.preventDefault();
-            // Transport controls are always available (independent of album operations)
-            if (roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('next');
-            }
-            break;
-
-          case 'ArrowLeft':
-            event.preventDefault();
-            // Transport controls are always available (independent of album operations)
-            if (roon.state.paired && roon.state.lastZoneId) {
-              roon.transportControl('previous');
-            }
-            break;
-
-          case 'KeyR':
-            event.preventDefault();
-            // Only disable if this specific operation is in progress
-            if (
-              !roon.operations.playingAlbum &&
-              roon.state.paired &&
-              roon.state.lastZoneId
-            ) {
-              handlePlayRandomAlbum();
-            }
-            break;
-
-          case 'KeyA':
-            event.preventDefault();
-            // Only disable if this specific operation is in progress
-            if (
-              !roon.operations.fetchingArtist &&
-              roon.state.paired &&
-              roon.state.lastZoneId &&
-              nowPlaying.artist &&
-              nowPlaying.album
-            ) {
-              handleMoreFromArtist();
-            }
-            break;
-
-          default:
-            return;
-        }
-      }
-
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [
-      handlePlayRandomAlbum,
-      handleMoreFromArtist,
-      roon.operations,
-      roon.state.paired,
-      roon.state.lastZoneId,
-      roon.transportControl,
-      nowPlaying.artist,
-      nowPlaying.album,
-    ]);
-
-    /**
-     * Handles activity item click (replay album)
-     * @param {Object} activityItem - Activity item that was clicked
-     */
-    async function handleActivityItemClick(activityItem) {
-      if (!activityItem.title || !activityItem.subtitle) return;
-
-      await roon.playAlbumByName(activityItem.title, activityItem.subtitle);
     }
 
-    /**
-     * Handles click on progress bar to seek to a specific position
-     * @param {MouseEvent} event - Click event
-     */
-    function handleProgressBarClick(event) {
-      // Only seek if we have a valid track length
-      if (!nowPlaying.length) return;
+    const unsubscribe = window.roon.onEvent(handleNowPlayingEvent);
 
-      // Get the progress bar element and its bounding rect
-      const progressBar = event.currentTarget;
-      const rect = progressBar.getBoundingClientRect();
+    // Cleanup: remove event listener when zone changes or component unmounts
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [roon.state.lastZoneId]);
 
-      // Calculate click position as percentage of bar width
-      const clickX = event.clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+  // ==================== SEEK POSITION EVENT HANDLER ====================
 
-      // Calculate target time in seconds
-      const targetSeconds = percentage * nowPlaying.length;
+  useEffect(() => {
+    function handleSeekPositionEvent(payload) {
+      if (payload.type !== 'seekPosition') return;
+      if (payload.zoneId && payload.zoneId !== roon.state.lastZoneId) return;
 
-      // Seek to the calculated position
-      roon.seek(targetSeconds);
+      // Update only the seek position in nowPlaying state
+      setNowPlaying(previous => ({
+        ...previous,
+        seek_position: payload.seek_position,
+      }));
     }
 
-    // ==================== UI STATE CALCULATIONS ====================
+    const unsubscribe = window.roon.onEvent(handleSeekPositionEvent);
 
-    const isPlaying = currentZone?.state === 'playing';
-    const hasVolumeControl = currentZone?.volume?.type === 'number';
+    // Cleanup: remove event listener when zone changes or component unmounts
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [roon.state.lastZoneId]);
 
-    // Get primary artist for button state (More from Artist button should be enabled if we have a primary artist)
-    const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
+  // ==================== ACTIVITY PERSISTENCE ====================
 
-    // ==================== RENDER TOOLBAR ====================
-
-    const toolbar = e(
-      'div',
-      { className: 'toolbar' },
-      // Zone selector
-      e(
-        'div',
-        { className: 'seg' },
-        e('span', { className: 'muted' }, 'Zone'),
-        e(
-          'select',
-          {
-            value: roon.state.lastZoneId || '',
-            onChange(event) {
-              roon.selectZone(event.target.value);
-            },
-          },
-          roon.zones
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(zone => {
-              return e('option', { key: zone.id, value: zone.id }, zone.name);
-            })
-        )
-      ),
-
-      e('div', { className: 'divider' }),
-
-      // Connection status
-      e(
-        'div',
-        { className: 'seg' },
-        e('span', { className: 'muted' }, 'Core:'),
-        e(
-          'span',
-          {
-            className: roon.state.paired ? 'status-yes' : 'status-no',
-            style: {
-              fontSize: '12px',
-              verticalAlign: 'baseline',
-            },
-          },
-          '●'
-        ),
-        e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
-      ),
-
-      e('div', { className: 'divider' }),
-
-      // Profile selector
-      roon.profiles && roon.profiles.length > 0
-        ? e(
-            'div',
-            { className: 'seg' },
-            e('span', { className: 'muted' }, 'Profile'),
-            e(
-              'select',
-              {
-                value:
-                  roon.profiles.find(p => p.isSelected)?.name ||
-                  roon.currentProfile ||
-                  '',
-                disabled:
-                  !roon.state.paired || roon.operations.switchingProfile,
-                onChange(event) {
-                  const selectedProfileName = event.target.value;
-                  if (selectedProfileName) {
-                    roon.switchProfile(selectedProfileName);
-                  }
-                },
-              },
-              roon.profiles.map(profile => {
-                return e(
-                  'option',
-                  { key: profile.name, value: profile.name },
-                  profile.name
-                );
-              })
-            )
-          )
-        : null,
-
-      e('div', { className: 'spacer' }),
-
-      // Play Random Album button
-      e(
-        'button',
-        {
-          className: 'btn btn-primary',
-          disabled:
-            roon.operations.playingAlbum ||
-            !roon.state.paired ||
-            !roon.state.lastZoneId,
-          onClick: handlePlayRandomAlbum,
-        },
-        roon.operations.playingAlbum
-          ? e('span', { className: 'spinner' })
-          : e(DiceIcon),
-        roon.operations.playingAlbum ? ' Working…' : ' Play Random Album'
-      )
-    );
-
-    // ==================== RENDER NOW PLAYING CARD ====================
-
-    const nowPlayingCard = e(
-      'div',
-      {
-        className: 'card now-playing-card',
-        'data-has-art': nowPlaying.art ? 'true' : 'false',
-        style: nowPlaying.art ? { '--bg-image': `url(${nowPlaying.art})` } : {},
-      },
-      e('h2', null, 'Now Playing'),
-      e(
-        'div',
-        { className: 'np' },
-        // Album art
-        nowPlaying.art
-          ? e('img', {
-              className: 'cover',
-              src: nowPlaying.art,
-              alt: 'Album art',
-            })
-          : e('div', { className: 'cover' }),
-
-        // Track information - DISPLAY full artist but USE primary for functionality
-        e(
-          'div',
-          {
-            style: {
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              gap: '8px',
-            },
-          },
-          e(
-            'div',
-            {
-              style: {
-                fontSize: 22,
-                fontWeight: 700,
-                lineHeight: 1.12,
-                overflowWrap: 'anywhere',
-              },
-            },
-            nowPlaying.song ? smartQuotes(nowPlaying.song) : '—'
-          ),
-          e(
-            'div',
-            {
-              style: {
-                fontSize: 18,
-                lineHeight: 1.12,
-                overflowWrap: 'anywhere',
-                textAlign: 'center',
-                paddingLeft: '16px',
-                paddingRight: '16px',
-              },
-            },
-            e(
-              'button',
-              {
-                className: 'artist-link',
-                disabled: roon.operations.fetchingArtist || !primaryArtist,
-                onClick: handleMoreFromArtist,
-                title: primaryArtist
-                  ? `Play a different album from ${primaryArtist}`
-                  : 'No artist available',
-                style: {
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  fontSize: 'inherit',
-                  lineHeight: 'inherit',
-                  overflowWrap: 'anywhere',
-                  color:
-                    primaryArtist && !roon.operations.fetchingArtist
-                      ? '#007aff'
-                      : 'var(--muted)',
-                  cursor:
-                    primaryArtist && !roon.operations.fetchingArtist
-                      ? 'pointer'
-                      : 'default',
-                  textDecoration: 'none',
-                  transition: 'color 0.15s ease-in-out',
-                },
-              },
-              primaryArtist ? smartQuotes(primaryArtist) : 'Unknown Artist'
-            ),
-            nowPlaying.album
-              ? e(
-                  'span',
-                  {
-                    style: {
-                      color: 'var(--muted)',
-                    },
-                  },
-                  ' • ',
-                  smartQuotes(nowPlaying.album)
-                )
-              : null
-          )
-        ),
-
-        // Progress bar - only show if we have length data
-        nowPlaying.length
-          ? e(
-              'div',
-              { className: 'progress-container' },
-              e(
-                'div',
-                { className: 'progress-time' },
-                formatTime(nowPlaying.seek_position)
-              ),
-              e(
-                'div',
-                {
-                  className: 'progress-bar',
-                  onClick: handleProgressBarClick,
-                  style: { cursor: 'pointer' },
-                },
-                e('div', {
-                  className: 'progress-fill',
-                  style: {
-                    width:
-                      nowPlaying.seek_position && nowPlaying.length
-                        ? `${(nowPlaying.seek_position / nowPlaying.length) * 100}%`
-                        : '0%',
-                  },
-                })
-              ),
-              e(
-                'div',
-                { className: 'progress-time' },
-                formatTime(nowPlaying.length)
-              )
-            )
-          : null,
-
-        // Transport controls
-        e(
-          'div',
-          { className: 'transport-controls' },
-          e(
-            'button',
-            {
-              className: 'btn-icon',
-              onClick: () => roon.transportControl('previous'),
-            },
-            e('img', { src: './images/previous-100.png', alt: 'Previous' })
-          ),
-          e(
-            'button',
-            {
-              className: 'btn-icon btn-playpause',
-              onClick: () => roon.transportControl('playpause'),
-            },
-            e('img', {
-              src: isPlaying
-                ? './images/pause-100.png'
-                : './images/play-100.png',
-              alt: 'Play/Pause',
-            })
-          ),
-          e(
-            'button',
-            {
-              className: 'btn-icon',
-              onClick: () => roon.transportControl('next'),
-            },
-            e('img', { src: './images/next-100.png', alt: 'Next' })
-          )
-        ),
-
-        // Volume area - centered under transport controls
-        hasVolumeControl
-          ? e(
-              'div',
-              {
-                style: {
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0px',
-                  width: '100%',
-                },
-              },
-              // Volume/mute icon
-              e(
-                'button',
-                {
-                  className: 'btn-icon',
-                  onClick: () => roon.muteToggle(),
-                  style: {
-                    padding: 0,
-                    background: 'none',
-                    border: 'none',
-                  },
-                },
-                e('img', {
-                  src: currentZone.volume.is_muted
-                    ? './images/mute-100.png'
-                    : './images/volume-100.png',
-                  alt: currentZone.volume.is_muted ? 'Unmute' : 'Mute',
-                  style: {
-                    width: '20px',
-                    height: '20px',
-                    transition: 'opacity 0.15s ease-in-out',
-                  },
-                })
-              ),
-              // Volume slider
-              e('input', {
-                type: 'range',
-                min: currentZone.volume.min,
-                max: currentZone.volume.max,
-                step: currentZone.volume.step,
-                value:
-                  localVolume !== null ? localVolume : currentZone.volume.value,
-                onInput: event => setLocalVolume(event.target.value),
-                onChange: event => roon.changeVolume(event.target.value),
-                style: {
-                  width: '210px', // 75% of 280px
-                  transform: 'translateY(2px)', // Visual alignment with transport buttons
-                  background: `linear-gradient(to right, #6b7280 0%, #6b7280 ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) ${(((localVolume !== null ? localVolume : currentZone.volume.value) - currentZone.volume.min) / (currentZone.volume.max - currentZone.volume.min)) * 100}%, var(--border) 100%)`,
-                },
-              })
-            )
-          : null
-      )
-    );
-
-    // ==================== RENDER GENRE FILTER CARD ====================
-
-    const genreFilterCard = e(GenreFilter, {
-      roon,
-      allGenres: roon.genres,
-      selectedGenres,
-      setSelectedGenres,
-      expandedGenres,
-      setExpandedGenres,
-      subgenresCache,
-      setSubgenresCache,
-    });
-
-    // ==================== ACTIVITY HELPER FUNCTIONS ====================
-
-    /**
-     * Handles clearing the activity list
-     */
-    async function handleClearActivity() {
+  useEffect(() => {
+    async function loadPersistedActivity() {
       try {
-        await roon.clearActivity();
+        const persistedActivity = await window.roon.getActivity();
+        console.log(
+          '[UI] Loaded persisted activity:',
+          persistedActivity?.length || 0,
+          'items'
+        );
+
+        // Convert persisted activity to UI format (with album art)
+        const activityWithArt = await Promise.all(
+          (persistedActivity || [])
+            .slice(0, ACTIVITY_HISTORY_LIMIT)
+            .map(async item => {
+              let artUrl = null;
+
+              // Fetch album art if we have an image key
+              if (item.imageKey) {
+                try {
+                  artUrl = await window.roon.getImage(item.imageKey);
+                } catch (error) {
+                  console.warn(
+                    `Failed to load album art for ${item.title}:`,
+                    error
+                  );
+                }
+              }
+
+              return {
+                id: item.id, // Preserve ID for removal
+                title: item.title,
+                subtitle: item.subtitle,
+                art: artUrl,
+                t: item.timestamp,
+                key: item.key || createActivityKey(item.title, item.subtitle),
+              };
+            })
+        );
+
+        setActivity(activityWithArt);
+      } catch (error) {
+        console.error('Failed to load persisted activity:', error);
         setActivity([]);
-        console.log('[UI] Activity cleared');
-      } catch (error) {
-        console.error('Failed to clear activity:', error);
       }
     }
 
-    /**
-     * Handles removing a single activity item
-     * @param {Event} event - Click event (to stop propagation)
-     * @param {string} itemId - ID of the item to remove
-     */
-    async function handleRemoveActivity(event, itemId) {
-      // Stop propagation to prevent triggering the item click
-      event.stopPropagation();
+    loadPersistedActivity();
+  }, []);
+
+  // ==================== VOLUME SYNC ====================
+
+  useEffect(() => {
+    if (currentZone?.volume) {
+      setLocalVolume(currentZone.volume.value);
+    } else {
+      setLocalVolume(null);
+    }
+  }, [currentZone?.volume?.value]);
+
+  // ==================== ACTIVITY HELPER FUNCTIONS ====================
+
+  /**
+   * Saves an activity item to persistent storage and updates UI state
+   * Memoized with useCallback to prevent unnecessary re-renders
+   * @param {string} albumTitle - Album title
+   * @param {string} artistName - Artist name (primary artist)
+   * @param {string} imageKey - Roon image key
+   * @param {string} artUrl - Album art data URL for immediate UI display
+   * @param {string} playedVia - How the album was selected ('random' or 'artist')
+   */
+  const saveActivityItem = useCallback(
+    async (albumTitle, artistName, imageKey, artUrl, playedVia = 'random') => {
+      const activityKey = createActivityKey(albumTitle, artistName);
+
+      // Create the activity item for UI (with art data URL)
+      const uiActivityItem = {
+        title: albumTitle || '—',
+        subtitle: artistName || '',
+        art: artUrl,
+        t: Date.now(),
+        key: activityKey,
+      };
+
+      // Create the activity item for persistence (with image key, not data URL)
+      const persistedActivityItem = {
+        id: null, // Will be generated by the main process
+        title: albumTitle || '—',
+        subtitle: artistName || '',
+        timestamp: Date.now(),
+        imageKey,
+        key: activityKey,
+        playedVia,
+      };
 
       try {
-        await roon.removeActivity(itemId);
-        // Update local state by filtering out the removed item
-        setActivity(prevActivity =>
-          prevActivity.filter(item => item.id !== itemId)
+        // Save to persistent storage
+        const result = await window.roon.addActivity(persistedActivityItem);
+
+        // Add the generated ID to the UI item
+        if (result && result.id) {
+          uiActivityItem.id = result.id;
+        }
+
+        // Update UI state immediately
+        setActivity(previousActivity =>
+          [uiActivityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
         );
-        console.log('[UI] Activity item removed:', itemId);
+
+        console.log('[UI] Saved activity item:', albumTitle, 'by', artistName);
       } catch (error) {
-        console.error('Failed to remove activity item:', error);
+        console.error('Failed to save activity item:', error);
+
+        // Still update UI even if persistence fails (without ID)
+        setActivity(previousActivity =>
+          [uiActivityItem, ...previousActivity].slice(0, ACTIVITY_HISTORY_LIMIT)
+        );
+      }
+    },
+    [setActivity]
+  );
+
+  // ==================== EVENT HANDLERS ====================
+
+  /**
+   * Handles Play Random Album button click
+   * Memoized with useCallback to prevent unnecessary re-renders
+   */
+  const handlePlayRandomAlbum = useCallback(async () => {
+    // Convert selected genre names to full genre objects with album counts
+    const selectedGenreObjects = selectedGenres
+      .map(genreName => {
+        // Check if this is a subgenre (contains ::)
+        if (genreName.includes('::')) {
+          const [parentGenre, subgenreTitle] = genreName.split('::');
+          const subgenres = subgenresCache.get(parentGenre) || [];
+          const subgenreObj = subgenres.find(sg => sg.title === subgenreTitle);
+          if (!subgenreObj) {
+            console.warn(
+              `Subgenre "${subgenreTitle}" not found in ${parentGenre}`
+            );
+            return null;
+          }
+          return { ...subgenreObj, isSubgenre: true };
+        } else {
+          // Regular top-level genre
+          const genreObj = roon.genres.find(g => g.title === genreName);
+          if (!genreObj) {
+            console.warn(`Genre "${genreName}" not found in genre list`);
+            return null;
+          }
+          return { ...genreObj, isSubgenre: false };
+        }
+      })
+      .filter(Boolean); // Remove any null entries
+
+    console.log('[UI] Sending genre objects:', selectedGenreObjects);
+
+    const result = await roon.playRandomAlbum(selectedGenreObjects);
+
+    if (result && !result.ignored) {
+      // Use primary artist for activity tracking
+      const primaryArtist = extractPrimaryArtist(result.artist);
+      const artUrl = result.image_key
+        ? await window.roon.getImage(result.image_key)
+        : null;
+
+      // Save to persistent storage and update UI
+      await saveActivityItem(
+        result.album,
+        primaryArtist,
+        result.image_key,
+        artUrl,
+        'random'
+      );
+    }
+  }, [
+    selectedGenres,
+    subgenresCache,
+    roon.genres,
+    roon.playRandomAlbum,
+    saveActivityItem,
+  ]);
+
+  /**
+   * Handles More from Artist button click
+   * Memoized with useCallback to prevent unnecessary re-renders
+   */
+  const handleMoreFromArtist = useCallback(async () => {
+    if (!nowPlaying.artist || !nowPlaying.album) return;
+
+    // FIXED: Use only the primary artist for the search
+    const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
+    console.log(
+      `[More from Artist] Full artist: "${nowPlaying.artist}" -> Primary: "${primaryArtist}"`
+    );
+
+    const result = await roon.playRandomAlbumByArtist(
+      primaryArtist,
+      nowPlaying.album
+    );
+
+    if (result && !result.ignored) {
+      // Use primary artist for activity tracking too
+      const resultPrimaryArtist = extractPrimaryArtist(result.artist);
+      const artUrl = result.image_key
+        ? await window.roon.getImage(result.image_key)
+        : null;
+
+      // Save to persistent storage and update UI
+      await saveActivityItem(
+        result.album,
+        resultPrimaryArtist,
+        result.image_key,
+        artUrl,
+        'artist'
+      );
+    }
+  }, [
+    nowPlaying.artist,
+    nowPlaying.album,
+    roon.playRandomAlbumByArtist,
+    saveActivityItem,
+  ]);
+
+  // ==================== KEYBOARD SHORTCUTS ====================
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      // Don't trigger shortcuts when typing in inputs
+      if (
+        event.target.tagName === 'INPUT' ||
+        event.target.tagName === 'SELECT'
+      ) {
+        return;
+      }
+
+      switch (event.code) {
+        case 'Space':
+          event.preventDefault();
+          // Transport controls are always available (independent of album operations)
+          if (roon.state.paired && roon.state.lastZoneId) {
+            roon.transportControl('playpause');
+          }
+          break;
+
+        case 'ArrowRight':
+          event.preventDefault();
+          // Transport controls are always available (independent of album operations)
+          if (roon.state.paired && roon.state.lastZoneId) {
+            roon.transportControl('next');
+          }
+          break;
+
+        case 'ArrowLeft':
+          event.preventDefault();
+          // Transport controls are always available (independent of album operations)
+          if (roon.state.paired && roon.state.lastZoneId) {
+            roon.transportControl('previous');
+          }
+          break;
+
+        case 'KeyR':
+          event.preventDefault();
+          // Only disable if this specific operation is in progress
+          if (
+            !roon.operations.playingAlbum &&
+            roon.state.paired &&
+            roon.state.lastZoneId
+          ) {
+            handlePlayRandomAlbum();
+          }
+          break;
+
+        case 'KeyA':
+          event.preventDefault();
+          // Only disable if this specific operation is in progress
+          if (
+            !roon.operations.fetchingArtist &&
+            roon.state.paired &&
+            roon.state.lastZoneId &&
+            nowPlaying.artist &&
+            nowPlaying.album
+          ) {
+            handleMoreFromArtist();
+          }
+          break;
+
+        default:
+          return;
       }
     }
 
-    // ==================== RENDER ACTIVITY CARD ====================
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    handlePlayRandomAlbum,
+    handleMoreFromArtist,
+    roon.operations,
+    roon.state.paired,
+    roon.state.lastZoneId,
+    roon.transportControl,
+    nowPlaying.artist,
+    nowPlaying.album,
+  ]);
 
-    const activityCard = e(
-      'div',
-      { className: 'card activity-card' },
-      // Header with clear button
-      e(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          },
-        },
-        e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Activity'),
-        e(
-          'button',
-          {
-            className: 'btn-link',
-            onClick: handleClearActivity,
-            disabled: activity.length === 0,
-            style: { transform: 'translateY(-4px)' },
-          },
-          'Clear All'
-        )
-      ),
-      e(
-        'div',
-        { className: 'activity' },
-        activity.length > 0
-          ? activity.map((item, index) => {
-              return e(
-                'button',
-                {
-                  key: index,
-                  className: 'item',
-                  onClick: () => handleActivityItemClick(item),
-                  disabled: !item.title || !item.subtitle,
-                  style: {
-                    width: '100%',
-                    appearance: 'none',
-                    textAlign: 'left',
-                    cursor: item.title && item.subtitle ? 'pointer' : 'default',
-                    position: 'relative',
-                  },
-                },
-                item.art
-                  ? e('img', {
-                      className: 'thumb',
-                      src: item.art,
-                      alt: item.title,
-                    })
-                  : e('div', { className: 'thumb' }),
-                e(
-                  'div',
-                  { style: { flex: 1 } },
-                  e('div', { className: 'title' }, smartQuotes(item.title)),
-                  e(
-                    'div',
-                    { className: 'muted' },
-                    smartQuotes(item.subtitle) || ''
-                  ),
-                  e('div', { className: 'time' }, formatRelativeTime(item.t))
-                ),
-                // Remove button
-                e(
-                  'button',
-                  {
-                    className: 'activity-remove-btn',
-                    onClick: event => handleRemoveActivity(event, item.id),
-                    title: 'Remove from activity',
-                    'aria-label': 'Remove from activity',
-                  },
-                  '×'
-                )
-              );
-            })
-          : e('div', { className: 'muted' }, 'No actions yet.')
-      )
-    );
+  /**
+   * Handles activity item click (replay album)
+   * @param {Object} activityItem - Activity item that was clicked
+   */
+  async function handleActivityItemClick(activityItem) {
+    if (!activityItem.title || !activityItem.subtitle) return;
 
-    // ==================== MAIN RENDER ====================
-
-    return e(
-      'div',
-      { className: 'wrap' },
-      toolbar,
-      e(
-        'div',
-        { className: 'grid' },
-        nowPlayingCard,
-        genreFilterCard,
-        activityCard
-      )
-    );
+    await roon.playAlbumByName(activityItem.title, activityItem.subtitle);
   }
 
-  // ==================== APPLICATION BOOTSTRAP ====================
+  /**
+   * Handles click on progress bar to seek to a specific position
+   * @param {MouseEvent} event - Click event
+   */
+  function handleProgressBarClick(event) {
+    // Only seek if we have a valid track length
+    if (!nowPlaying.length) return;
 
-  ReactDOM.createRoot(root).render(e(ErrorBoundary, null, e(App)));
-})();
+    // Get the progress bar element and its bounding rect
+    const progressBar = event.currentTarget;
+    const rect = progressBar.getBoundingClientRect();
+
+    // Calculate click position as percentage of bar width
+    const clickX = event.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+
+    // Calculate target time in seconds
+    const targetSeconds = percentage * nowPlaying.length;
+
+    // Seek to the calculated position
+    roon.seek(targetSeconds);
+  }
+
+  // ==================== UI STATE CALCULATIONS ====================
+
+  const isPlaying = currentZone?.state === 'playing';
+  const hasVolumeControl = currentZone?.volume?.type === 'number';
+
+  // Get primary artist for button state (More from Artist button should be enabled if we have a primary artist)
+  const primaryArtist = extractPrimaryArtist(nowPlaying.artist);
+
+  // ==================== RENDER TOOLBAR ====================
+
+  const toolbar = e(
+    'div',
+    { className: 'toolbar' },
+    // Zone selector
+    e(
+      'div',
+      { className: 'seg' },
+      e('span', { className: 'muted' }, 'Zone'),
+      e(
+        'select',
+        {
+          value: roon.state.lastZoneId || '',
+          onChange(event) {
+            roon.selectZone(event.target.value);
+          },
+        },
+        roon.zones
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(zone => {
+            return e('option', { key: zone.id, value: zone.id }, zone.name);
+          })
+      )
+    ),
+
+    e('div', { className: 'divider' }),
+
+    // Connection status
+    e(
+      'div',
+      { className: 'seg' },
+      e('span', { className: 'muted' }, 'Core:'),
+      e(
+        'span',
+        {
+          className: roon.state.paired ? 'status-yes' : 'status-no',
+          style: {
+            fontSize: '12px',
+            verticalAlign: 'baseline',
+          },
+        },
+        '●'
+      ),
+      e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
+    ),
+
+    e('div', { className: 'divider' }),
+
+    // Profile selector
+    roon.profiles && roon.profiles.length > 0
+      ? e(
+          'div',
+          { className: 'seg' },
+          e('span', { className: 'muted' }, 'Profile'),
+          e(
+            'select',
+            {
+              value:
+                roon.profiles.find(p => p.isSelected)?.name ||
+                roon.currentProfile ||
+                '',
+              disabled: !roon.state.paired || roon.operations.switchingProfile,
+              onChange(event) {
+                const selectedProfileName = event.target.value;
+                if (selectedProfileName) {
+                  roon.switchProfile(selectedProfileName);
+                }
+              },
+            },
+            roon.profiles.map(profile => {
+              return e(
+                'option',
+                { key: profile.name, value: profile.name },
+                profile.name
+              );
+            })
+          )
+        )
+      : null,
+
+    e('div', { className: 'spacer' }),
+
+    // Play Random Album button
+    e(
+      'button',
+      {
+        className: 'btn btn-primary',
+        disabled:
+          roon.operations.playingAlbum ||
+          !roon.state.paired ||
+          !roon.state.lastZoneId,
+        onClick: handlePlayRandomAlbum,
+      },
+      roon.operations.playingAlbum
+        ? e('span', { className: 'spinner' })
+        : e(DiceIcon),
+      roon.operations.playingAlbum ? ' Working…' : ' Play Random Album'
+    )
+  );
+
+  // ==================== RENDER NOW PLAYING CARD ====================
+
+  const nowPlayingCard = e(NowPlayingCard, {
+    nowPlaying,
+    primaryArtist,
+    isPlaying,
+    hasVolumeControl,
+    currentZone,
+    localVolume,
+    setLocalVolume,
+    roon,
+    onMoreFromArtist: handleMoreFromArtist,
+    onProgressBarClick: handleProgressBarClick,
+  });
+
+  // ==================== RENDER GENRE FILTER CARD ====================
+
+  const genreFilterCard = e(GenreFilter, {
+    roon,
+    allGenres: roon.genres,
+    selectedGenres,
+    setSelectedGenres,
+    expandedGenres,
+    setExpandedGenres,
+    subgenresCache,
+    setSubgenresCache,
+  });
+
+  // ==================== ACTIVITY HELPER FUNCTIONS ====================
+
+  /**
+   * Handles clearing the activity list
+   */
+  async function handleClearActivity() {
+    try {
+      await roon.clearActivity();
+      setActivity([]);
+      console.log('[UI] Activity cleared');
+    } catch (error) {
+      console.error('Failed to clear activity:', error);
+    }
+  }
+
+  /**
+   * Handles removing a single activity item
+   * @param {Event} event - Click event (to stop propagation)
+   * @param {string} itemId - ID of the item to remove
+   */
+  async function handleRemoveActivity(event, itemId) {
+    // Stop propagation to prevent triggering the item click
+    event.stopPropagation();
+
+    try {
+      await roon.removeActivity(itemId);
+      // Update local state by filtering out the removed item
+      setActivity(prevActivity =>
+        prevActivity.filter(item => item.id !== itemId)
+      );
+      console.log('[UI] Activity item removed:', itemId);
+    } catch (error) {
+      console.error('Failed to remove activity item:', error);
+    }
+  }
+
+  // ==================== RENDER ACTIVITY CARD ====================
+
+  const activityCard = e(ActivityCard, {
+    activity,
+    onItemClick: handleActivityItemClick,
+    onRemoveItem: handleRemoveActivity,
+    onClearAll: handleClearActivity,
+  });
+
+  // ==================== MAIN RENDER ====================
+
+  return e(
+    'div',
+    { className: 'wrap' },
+    toolbar,
+    e(
+      'div',
+      { className: 'grid' },
+      nowPlayingCard,
+      genreFilterCard,
+      activityCard
+    )
+  );
+}
+
+// ==================== APPLICATION BOOTSTRAP ====================
+
+ReactDOM.createRoot(root).render(e(ErrorBoundary, null, e(App)));
