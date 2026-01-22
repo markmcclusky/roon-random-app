@@ -76,12 +76,17 @@ If you get an error message stating that the app is damaged and can't be opened,
 
 #### Windows
 
-1. Download `RoonRandomAlbumSetup.exe` from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
-2. Run the installer
+1. Download the `.msi` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
+   - File name format: `Roon-Random-Album-x.x.x.msi` (e.g., `Roon-Random-Album-1.6.8.msi`)
+2. Double-click the MSI file to launch the installer wizard
    - **Note**: Windows SmartScreen may show a warning because the app is currently unsigned
    - Click "More info" then "Run anyway" to proceed with installation
-3. The app will install to `%LOCALAPPDATA%\RoonRandomAlbum\` and create a Start Menu entry
+3. Follow the installation wizard:
+   - Choose installation location (default: `C:\Program Files\RoonRandomAlbum\`)
+   - Installation creates a Start Menu entry and optional desktop shortcut
 4. Launch from the Start Menu (search for "Roon Random Album")
+
+**Uninstallation**: Use Windows Settings > Apps > Installed apps, or Control Panel > Programs > Uninstall a program
 
 **Alternative**: Download the Windows ZIP file for a portable installation without an installer.
 
@@ -253,7 +258,7 @@ Creates platform-specific installers:
 
 **Windows:**
 
-- Setup.exe installer (Squirrel.Windows)
+- MSI installer (WiX-based, standard Windows Installer format)
 - ZIP archive for portable installation
 
 Output in `out/` directory

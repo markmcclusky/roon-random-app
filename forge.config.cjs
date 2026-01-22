@@ -45,20 +45,26 @@ module.exports = {
         icon: 'assets/icon.icns',
       },
     },
-    // Windows maker - Squirrel installer
+    // Windows maker - WiX MSI installer
     {
-      name: '@electron-forge/maker-squirrel',
+      name: '@electron-forge/maker-wix',
       config: {
-        name: 'RoonRandomAlbum',
-        authors: 'Mark McClusky',
-        exe: 'Roon Random Album.exe',
+        name: 'Roon Random Album',
+        manufacturer: 'Mark McClusky',
         description:
           'Desktop app for playing random Roon albums with intelligent filtering',
-        iconUrl:
-          'https://raw.githubusercontent.com/markmcclusky/roon-random-app/main/assets/icon.ico',
-        setupIcon: 'assets/icon.ico',
-        loadingGif: 'assets/loading.png', // 256x256 loading screen during installation
-        noMsi: true, // Don't create MSI installer (Squirrel only)
+        exe: 'Roon Random Album',
+        version: packageJson.version,
+        // Visual customization
+        ui: {
+          enabled: true, // Enable UI for installer wizard
+          chooseDirectory: true, // Allow users to choose install location
+        },
+        // Shortcuts
+        shortcutFolderName: 'Roon Random Album',
+        shortcutName: 'Roon Random Album',
+        // Program Files installation
+        programFilesFolderName: 'RoonRandomAlbum',
       },
     },
   ],
