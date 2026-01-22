@@ -11,6 +11,15 @@ A desktop application for discovering music through intelligent random album sel
 - **Session Tracking**: Avoids repeating albums within the same session until all options are exhausted
 - **Multi-Genre Support**: Select multiple genres and subgenres for varied listening experiences
 
+### 🌐 Manual Connection (Beta)
+
+> **New in v1.7.0b**: Connect to Roon Core via IP address
+
+- **Auto-discovery or Manual**: Choose between automatic network discovery or manual IP configuration
+- **Reliable Connection**: Ideal for complex networks, VPNs, or when auto-discovery fails
+- **Connection Testing**: Test connectivity before saving settings
+- **Easy Access**: Gmail-style dropdown in toolbar for quick connection mode switching
+
 ### 🎵 Now Playing Integration
 
 - **Real-time Display**: Shows current track, album, artist, cover art, and track progress
@@ -109,7 +118,23 @@ The app uses Roon's official API and requires authorization:
 
 - Connection tokens are automatically managed and persisted
 - Pairing status is displayed in the top toolbar
-- No manual configuration required
+- No manual configuration required for auto-discovery
+
+### Manual Connection (Beta)
+
+If auto-discovery doesn't work (VPN, complex network, firewall), use manual connection:
+
+1. Click the **Roon Server** dropdown in the toolbar
+2. Select **Manual connection**
+3. Click **Connection settings...** at the bottom of the dropdown
+4. Enter your Roon Core's IP address (find it in Roon Settings > About)
+5. Enter the port (default is 9330)
+6. Click **Test Connection** to verify
+7. Click **Save & Reconnect**
+
+The app will remember your settings. Switch back to auto-discovery anytime via the dropdown.
+
+**Note**: Manual connection is currently in beta. Please report any issues on GitHub.
 
 ## Usage
 
