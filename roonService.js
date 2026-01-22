@@ -18,6 +18,7 @@ import RoonApi from 'node-roon-api';
 import RoonApiBrowse from 'node-roon-api-browse';
 import RoonApiTransport from 'node-roon-api-transport';
 import RoonApiImage from 'node-roon-api-image';
+import WebSocket from 'ws';
 
 import { findItemCaseInsensitive, createAlbumKey } from './roonHelpers.js';
 import { LRUImageCache } from './imageCache.js';
@@ -238,6 +239,13 @@ let core = null;
 let browseService = null;
 let transportService = null;
 
+// Manual connection state
+let _manualConnection = null; // Holds the moo object for manual connections (prefixed to indicate internal use)
+let manualConnectionRetryTimer = null;
+const MANUAL_CONNECTION_RETRY_DELAY = 5000; // 5 seconds between retries
+const MAX_MANUAL_CONNECTION_RETRIES = 3;
+let manualConnectionRetryCount = 0;
+
 // Zone and playback state
 let zonesCache = [];
 let zonesRaw = [];
@@ -375,10 +383,11 @@ export function getZoneNowPlaying(zoneId) {
 // ==================== CORE CONNECTION MANAGEMENT ====================
 
 /**
- * Initializes and starts Roon API connection
+ * Creates and configures the RoonApi instance
+ * @returns {RoonApi} Configured Roon API instance
  */
-function connectToRoon() {
-  roon = new RoonApi({
+function createRoonApi() {
+  return new RoonApi({
     ...EXTENSION_CONFIG,
 
     // Persist the pairing token + paired_core_id in userData/config.json
@@ -412,12 +421,160 @@ function connectToRoon() {
     core_paired: handleCorePaired,
     core_unpaired: handleCoreUnpaired,
   });
+}
+
+/**
+ * Handles manual connection closure - attempts reconnection
+ */
+function handleManualConnectionClosed() {
+  console.log('[Manual Connection] Connection closed');
+  _manualConnection = null;
+
+  // If we still have a core, the pairing is intact - just need to reconnect
+  if (core) {
+    console.log('[Manual Connection] Core was paired, connection lost');
+    handleCoreUnpaired();
+  }
+
+  // Attempt reconnection if we haven't exceeded retry limit
+  const connectionSettings = store.get('connectionSettings');
+  if (
+    connectionSettings?.mode === 'manual' &&
+    connectionSettings?.host &&
+    manualConnectionRetryCount < MAX_MANUAL_CONNECTION_RETRIES
+  ) {
+    manualConnectionRetryCount++;
+    console.log(
+      `[Manual Connection] Scheduling reconnection attempt ${manualConnectionRetryCount}/${MAX_MANUAL_CONNECTION_RETRIES}`
+    );
+
+    manualConnectionRetryTimer = setTimeout(() => {
+      console.log('[Manual Connection] Attempting reconnection...');
+      connectManually(connectionSettings.host, connectionSettings.port || 9330);
+    }, MANUAL_CONNECTION_RETRY_DELAY);
+  } else if (manualConnectionRetryCount >= MAX_MANUAL_CONNECTION_RETRIES) {
+    console.log(
+      '[Manual Connection] Max retries exceeded, emitting connection failure'
+    );
+    emitEvent({
+      type: 'connectionError',
+      error: 'Connection lost and max retries exceeded',
+      canRetry: true,
+    });
+  }
+}
+
+/**
+ * Handles manual connection error
+ * @param {Object} _moo - The moo connection object (unused)
+ */
+function handleManualConnectionError(_moo) {
+  console.error('[Manual Connection] Connection error occurred');
+  emitEvent({
+    type: 'connectionError',
+    error: 'Connection error',
+    canRetry: true,
+  });
+}
+
+/**
+ * Connects to Roon Core manually via WebSocket
+ * @param {string} host - IP address or hostname
+ * @param {number} port - Port number (default 9330)
+ */
+function connectManually(host, port = 9330) {
+  if (!roon) {
+    roon = createRoonApi();
+    roon.init_services({
+      required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage],
+    });
+  }
+
+  console.log(`[Manual Connection] Connecting to ${host}:${port}`);
+  emitEvent({
+    type: 'connectionStatus',
+    status: 'connecting',
+    host,
+    port,
+  });
+
+  try {
+    _manualConnection = roon.ws_connect({
+      host,
+      port,
+      onclose: handleManualConnectionClosed,
+      onerror: handleManualConnectionError,
+    });
+
+    // Reset retry count on successful connection initiation
+    // (actual success is determined by core_paired callback)
+  } catch (error) {
+    console.error('[Manual Connection] Failed to connect:', error);
+    emitEvent({
+      type: 'connectionError',
+      error: error.message || 'Failed to connect',
+      canRetry: true,
+    });
+  }
+}
+
+/**
+ * Stops auto-discovery if running
+ */
+function stopDiscovery() {
+  if (roon?._sood) {
+    console.log('[Connection] Stopping auto-discovery');
+    if (roon.scanIntervalId) {
+      clearInterval(roon.scanIntervalId);
+      roon.scanIntervalId = null;
+    }
+    roon._sood = null;
+    roon._sood_conns = {};
+  }
+}
+
+/**
+ * Cleans up manual connection state
+ */
+function cleanupManualConnection() {
+  if (manualConnectionRetryTimer) {
+    clearTimeout(manualConnectionRetryTimer);
+    manualConnectionRetryTimer = null;
+  }
+  manualConnectionRetryCount = 0;
+  _manualConnection = null;
+}
+
+/**
+ * Initializes and starts Roon API connection based on settings
+ */
+function connectToRoon() {
+  // Clean up any existing state
+  cleanupManualConnection();
+  stopDiscovery();
+
+  roon = createRoonApi();
 
   roon.init_services({
     required_services: [RoonApiBrowse, RoonApiTransport, RoonApiImage],
   });
 
-  roon.start_discovery();
+  // Check connection settings from store
+  const connectionSettings = store.get('connectionSettings');
+
+  if (connectionSettings?.mode === 'manual' && connectionSettings?.host) {
+    console.log(
+      `[Connection] Using manual connection to ${connectionSettings.host}:${connectionSettings.port || 9330}`
+    );
+    connectManually(connectionSettings.host, connectionSettings.port || 9330);
+  } else {
+    console.log('[Connection] Using auto-discovery');
+    emitEvent({
+      type: 'connectionStatus',
+      status: 'discovering',
+    });
+    roon.start_discovery();
+  }
 }
 
 /**
@@ -427,6 +584,9 @@ function connectToRoon() {
 function handleCorePaired(coreInstance) {
   console.log('[TIMING] 🔌 Core paired:', coreInstance.display_name);
   console.time('[TIMING] handleCorePaired');
+
+  // Reset manual connection retry count on successful pairing
+  manualConnectionRetryCount = 0;
 
   core = coreInstance;
   browseService = core.services.RoonApiBrowse;
@@ -447,10 +607,15 @@ function handleCorePaired(coreInstance) {
       console.error('Failed to load profiles on connect:', error);
     });
 
+  // Get connection mode to include in event
+  const connectionSettings = store.get('connectionSettings');
+  const isManualConnection = connectionSettings?.mode === 'manual';
+
   emitEvent({
     type: 'core',
     status: 'paired',
     coreDisplayName: core.display_name,
+    connectionMode: isManualConnection ? 'manual' : 'auto',
   });
 
   console.timeEnd('[TIMING] handleCorePaired');
@@ -1881,6 +2046,204 @@ export function getZonesCache() {
  */
 export function getRawZones() {
   return zonesRaw;
+}
+
+// ==================== CONNECTION SETTINGS ====================
+
+/**
+ * Gets current connection settings
+ * @returns {Object} Connection settings { mode, host, port }
+ */
+export function getConnectionSettings() {
+  return (
+    store.get('connectionSettings') || { mode: 'auto', host: null, port: 9330 }
+  );
+}
+
+/**
+ * Updates connection settings and reconnects if needed
+ * @param {Object} settings - New connection settings { mode, host, port }
+ * @returns {Object} Updated settings
+ */
+export function setConnectionSettings(settings) {
+  const currentSettings = getConnectionSettings();
+
+  const newSettings = {
+    mode: settings.mode || currentSettings.mode || 'auto',
+    host: settings.host !== undefined ? settings.host : currentSettings.host,
+    port:
+      settings.port !== undefined
+        ? settings.port
+        : currentSettings.port || 9330,
+  };
+
+  // Validate settings
+  if (newSettings.mode === 'manual' && !newSettings.host) {
+    throw new Error('Host is required for manual connection mode');
+  }
+
+  if (newSettings.port && (newSettings.port < 1 || newSettings.port > 65535)) {
+    throw new Error('Port must be between 1 and 65535');
+  }
+
+  store.set('connectionSettings', newSettings);
+  console.log('[Connection Settings] Updated:', newSettings);
+
+  return newSettings;
+}
+
+/**
+ * Tests a connection to a Roon Core by establishing a WebSocket connection
+ * This tests basic network connectivity without requiring full Roon pairing
+ * @param {string} host - IP address or hostname to test
+ * @param {number} port - Port number to test
+ * @returns {Promise<Object>} Result with success status
+ */
+export function testConnection(host, port = 9330) {
+  return new Promise((resolve, reject) => {
+    if (!host) {
+      return reject(new Error('Host is required'));
+    }
+
+    if (port < 1 || port > 65535) {
+      return reject(new Error('Port must be between 1 and 65535'));
+    }
+
+    console.log(`[Test Connection] Testing connection to ${host}:${port}`);
+
+    // Use WebSocket directly to test connectivity
+    // This avoids conflicts with the main Roon connection
+    const wsUrl = `ws://${host}:${port}/api`;
+
+    let ws = null;
+    let timeoutId = null;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (ws) {
+        try {
+          ws.close();
+        } catch {
+          // Ignore close errors
+        }
+        ws = null;
+      }
+    };
+
+    // Set a timeout
+    timeoutId = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      reject(
+        new Error(
+          'Connection timeout - unable to reach Roon Core. Check the IP address and port.'
+        )
+      );
+    }, 10000);
+
+    try {
+      ws = new WebSocket(wsUrl);
+
+      ws.on('open', () => {
+        if (resolved) return;
+        resolved = true;
+
+        console.log(`[Test Connection] WebSocket connected to ${host}:${port}`);
+        cleanup();
+
+        resolve({
+          success: true,
+          coreName: 'Roon Core', // We don't get the name without full pairing
+          host,
+          port,
+          message: 'Connection successful! The Roon Core is reachable.',
+        });
+      });
+
+      ws.on('error', err => {
+        if (resolved) return;
+        resolved = true;
+
+        console.error('[Test Connection] WebSocket error:', err.message);
+        cleanup();
+
+        // Provide helpful error messages based on error type
+        let message = `Connection failed to ${host}:${port}.`;
+        if (err.code === 'ECONNREFUSED') {
+          message +=
+            ' Connection refused - make sure Roon Core is running and the port is correct.';
+        } else if (err.code === 'ETIMEDOUT' || err.code === 'EHOSTUNREACH') {
+          message +=
+            ' Host unreachable - check the IP address and network connectivity.';
+        } else if (err.code === 'ENOTFOUND') {
+          message += ' Host not found - check the IP address or hostname.';
+        } else {
+          message += ` Error: ${err.message}`;
+        }
+
+        reject(new Error(message));
+      });
+
+      ws.on('close', () => {
+        // Connection closed - this is fine if we already resolved
+        if (!resolved) {
+          console.log('[Test Connection] Connection closed unexpectedly');
+        }
+      });
+    } catch (error) {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      reject(new Error(`Failed to connect: ${error.message}`));
+    }
+  });
+}
+
+/**
+ * Reconnects to Roon using current settings
+ * Useful for manually triggering reconnection after changing settings
+ */
+export function reconnect() {
+  console.log('[Connection] Manual reconnection requested');
+
+  // Clean up existing connections
+  cleanupManualConnection();
+  stopDiscovery();
+
+  // Clear core state
+  if (core) {
+    handleCoreUnpaired();
+  }
+
+  // Reconnect
+  connectToRoon();
+}
+
+/**
+ * Switches connection mode and reconnects
+ * @param {string} mode - 'auto' or 'manual'
+ * @param {string} [host] - Required if mode is 'manual'
+ * @param {number} [port] - Optional, defaults to 9330
+ * @returns {Object} Updated settings
+ */
+export function switchConnectionMode(mode, host = null, port = 9330) {
+  if (mode !== 'auto' && mode !== 'manual') {
+    throw new Error("Mode must be 'auto' or 'manual'");
+  }
+
+  if (mode === 'manual' && !host) {
+    throw new Error('Host is required for manual mode');
+  }
+
+  const settings = setConnectionSettings({ mode, host, port });
+  reconnect();
+
+  return settings;
 }
 
 // ==================== INITIALIZATION ====================

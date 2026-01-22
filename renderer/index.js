@@ -11,6 +11,8 @@ import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
 import { ActivityCard } from './components/ActivityCard.js';
+import { ConnectionSettings } from './components/ConnectionSettings.js';
+import { ConnectionStatusDropdown } from './components/ConnectionStatusDropdown.js';
 
 // Ensure React and ReactDOM are available
 if (!window?.React || !window?.ReactDOM) {
@@ -181,6 +183,36 @@ function useRoon() {
       alert(`Error switching profile: ${error.message}`);
     } finally {
       setOperation('switchingProfile', false);
+    }
+  }
+
+  // ==================== CONNECTION SETTINGS FUNCTIONS ====================
+
+  /**
+   * Gets current connection settings
+   * @returns {Promise<Object>} Connection settings { mode, host, port }
+   */
+  async function getConnectionSettings() {
+    try {
+      return await window.roon.getConnectionSettings();
+    } catch (error) {
+      console.error('Failed to get connection settings:', error);
+      return { mode: 'auto', host: null, port: 9330 };
+    }
+  }
+
+  /**
+   * Updates connection settings and triggers reconnection
+   * @param {Object} settings - New connection settings { mode, host, port }
+   */
+  async function setConnectionSettings(settings) {
+    try {
+      await window.roon.setConnectionSettings(settings);
+      await window.roon.reconnect();
+      console.log('[UI] Connection settings updated, reconnecting...');
+    } catch (error) {
+      console.error('Failed to set connection settings:', error);
+      throw error;
     }
   }
 
@@ -455,6 +487,10 @@ function useRoon() {
     muteToggle, // NEW
     clearActivity, // NEW
     removeActivity, // NEW
+
+    // Connection settings
+    getConnectionSettings,
+    setConnectionSettings,
   };
 }
 
@@ -490,6 +526,23 @@ function App() {
   // Subgenre expansion state (moved to main component for access in handlePlayRandomAlbum)
   const [expandedGenres, setExpandedGenres] = useState(new Set());
   const [subgenresCache, setSubgenresCache] = useState(new Map());
+
+  // Connection settings modal state
+  const [showConnectionSettings, setShowConnectionSettings] = useState(false);
+  const [connectionSettings, setConnectionSettingsState] = useState({
+    mode: 'auto',
+    host: null,
+    port: 9330,
+  });
+
+  // Load connection settings on mount
+  useEffect(() => {
+    async function loadConnectionSettings() {
+      const settings = await roon.getConnectionSettings();
+      setConnectionSettingsState(settings);
+    }
+    loadConnectionSettings();
+  }, []);
 
   // Get current zone info
   const currentZone = roon.zones.find(
@@ -875,6 +928,33 @@ function App() {
   ]);
 
   /**
+   * Handles saving connection settings
+   * @param {Object} settings - New connection settings { mode, host, port }
+   */
+  async function handleSaveConnectionSettings(settings) {
+    await roon.setConnectionSettings(settings);
+    setConnectionSettingsState(settings);
+  }
+
+  /**
+   * Handles quick mode change from dropdown (without opening modal)
+   * @param {string} mode - 'auto' or 'manual'
+   */
+  async function handleConnectionModeChange(mode) {
+    try {
+      // Update settings with new mode, keeping existing host/port for manual
+      const newSettings = {
+        ...connectionSettings,
+        mode,
+      };
+      await roon.setConnectionSettings(newSettings);
+      setConnectionSettingsState(newSettings);
+    } catch (error) {
+      console.error('Failed to change connection mode:', error);
+    }
+  }
+
+  /**
    * Handles activity item click (replay album)
    * @param {Object} activityItem - Activity item that was clicked
    */
@@ -943,23 +1023,18 @@ function App() {
 
     e('div', { className: 'divider' }),
 
-    // Connection status
+    // Connection status dropdown
     e(
       'div',
       { className: 'seg' },
-      e('span', { className: 'muted' }, 'Core:'),
-      e(
-        'span',
-        {
-          className: roon.state.paired ? 'status-yes' : 'status-no',
-          style: {
-            fontSize: '12px',
-            verticalAlign: 'baseline',
-          },
-        },
-        '●'
-      ),
-      e('span', { className: 'muted' }, roon.state.coreName || 'Unknown')
+      e('span', { className: 'muted' }, 'Roon Server'),
+      e(ConnectionStatusDropdown, {
+        paired: roon.state.paired,
+        coreName: roon.state.coreName,
+        connectionSettings,
+        onModeChange: handleConnectionModeChange,
+        onOpenSettings: () => setShowConnectionSettings(true),
+      })
     ),
 
     e('div', { className: 'divider' }),
@@ -1089,6 +1164,15 @@ function App() {
     onClearAll: handleClearActivity,
   });
 
+  // ==================== RENDER CONNECTION SETTINGS MODAL ====================
+
+  const connectionSettingsModal = e(ConnectionSettings, {
+    isOpen: showConnectionSettings,
+    onClose: () => setShowConnectionSettings(false),
+    currentSettings: connectionSettings,
+    onSave: handleSaveConnectionSettings,
+  });
+
   // ==================== MAIN RENDER ====================
 
   return e(
@@ -1101,7 +1185,8 @@ function App() {
       nowPlayingCard,
       genreFilterCard,
       activityCard
-    )
+    ),
+    connectionSettingsModal
   );
 }
 

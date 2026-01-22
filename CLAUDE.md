@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Even if tasks are numbered or seem sequential, wait for explicit approval before proceeding
 
 **Example of correct behavior:**
+
 ```
 ✅ Task completed: Window lifecycle management implemented
 ✅ All tests passing
@@ -23,6 +24,7 @@ What would you like me to work on next?
 ```
 
 **Example of incorrect behavior:**
+
 ```
 ❌ Task completed: Window lifecycle management implemented
 ❌ Moving on to operation-specific busy states... [NEVER DO THIS]

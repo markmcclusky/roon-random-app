@@ -28,6 +28,8 @@ export default [
         alert: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
         // Electron-specific
         require: 'readonly',
         module: 'readonly',
