@@ -139,4 +139,24 @@ export const Validators = {
 
     return allGenreObjects;
   },
+
+  /**
+   * Validates an array contains artist names (strings)
+   * @param {*} value - Value to validate
+   * @param {number} maxItems - Maximum allowed array size
+   * @returns {boolean} True if valid artist array
+   */
+  isArtistArray(value, maxItems = MAX_GENRE_ARRAY_SIZE) {
+    if (!Array.isArray(value) || value.length > maxItems) {
+      return false;
+    }
+    // Allow empty array
+    if (value.length === 0) {
+      return true;
+    }
+    // All items must be non-empty strings
+    return value.every(
+      item => typeof item === 'string' && item.trim().length > 0
+    );
+  },
 };

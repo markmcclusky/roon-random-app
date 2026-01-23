@@ -6,13 +6,14 @@
  */
 
 import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
-import { DiceIcon } from './components/Icons.js';
+import { DiceIcon, GearIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
 import { ActivityCard } from './components/ActivityCard.js';
 import { ConnectionSettings } from './components/ConnectionSettings.js';
 import { ConnectionStatusDropdown } from './components/ConnectionStatusDropdown.js';
+import { SettingsModal } from './components/SettingsModal.js';
 
 // Ensure React and ReactDOM are available
 if (!window?.React || !window?.ReactDOM) {
@@ -535,6 +536,9 @@ function App() {
     port: 9330,
   });
 
+  // Settings modal state (for artist exclusions)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
   // Load connection settings on mount
   useEffect(() => {
     async function loadConnectionSettings() {
@@ -955,6 +959,22 @@ function App() {
   }
 
   /**
+   * Handles updating excluded artists list
+   * @param {Array<string>} newExcludedArtists - Updated array of excluded artists
+   */
+  async function handleUpdateExclusions(newExcludedArtists) {
+    try {
+      const currentFilters = await roon.getFilters();
+      await roon.setFilters({
+        ...currentFilters,
+        excludedArtists: newExcludedArtists,
+      });
+    } catch (error) {
+      console.error('Failed to update excluded artists:', error);
+    }
+  }
+
+  /**
    * Handles activity item click (replay album)
    * @param {Object} activityItem - Activity item that was clicked
    */
@@ -1088,6 +1108,18 @@ function App() {
         ? e('span', { className: 'spinner' })
         : e(DiceIcon),
       roon.operations.playingAlbum ? ' Working…' : ' Play Random Album'
+    ),
+
+    // Settings button
+    e(
+      'button',
+      {
+        className: 'btn',
+        onClick: () => setSettingsModalOpen(true),
+        disabled: !roon.state.paired,
+        title: 'Settings',
+      },
+      e(GearIcon)
     )
   );
 
@@ -1164,6 +1196,15 @@ function App() {
     onClearAll: handleClearActivity,
   });
 
+  // ==================== RENDER SETTINGS MODAL ====================
+
+  const settingsModal = e(SettingsModal, {
+    isOpen: settingsModalOpen,
+    onClose: () => setSettingsModalOpen(false),
+    excludedArtists: roon.state.filters?.excludedArtists || [],
+    onUpdateExclusions: handleUpdateExclusions,
+  });
+
   // ==================== RENDER CONNECTION SETTINGS MODAL ====================
 
   const connectionSettingsModal = e(ConnectionSettings, {
@@ -1186,6 +1227,7 @@ function App() {
       genreFilterCard,
       activityCard
     ),
+    settingsModal,
     connectionSettingsModal
   );
 }
