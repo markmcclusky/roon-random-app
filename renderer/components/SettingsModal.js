@@ -94,6 +94,28 @@ export function SettingsModal(props) {
           )
         ),
 
+        // Clear All button
+        excludedArtists.length > 0
+          ? e(
+              'div',
+              { style: { marginBottom: '16px', textAlign: 'right' } },
+              e(
+                'button',
+                {
+                  type: 'button',
+                  className: 'btn-link',
+                  onClick: () => {
+                    if (window.confirm('Remove all excluded artists?')) {
+                      onUpdateExclusions([]);
+                    }
+                  },
+                  style: { color: '#ef4444', fontSize: '13px' },
+                },
+                'Clear All'
+              )
+            )
+          : null,
+
         // Excluded artists list
         excludedArtists.length > 0
           ? e(

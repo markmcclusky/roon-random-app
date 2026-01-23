@@ -964,7 +964,7 @@ function App() {
    */
   async function handleUpdateExclusions(newExcludedArtists) {
     try {
-      const currentFilters = await roon.getFilters();
+      const currentFilters = await window.roon.getFilters();
       await roon.setFilters({
         ...currentFilters,
         excludedArtists: newExcludedArtists,
