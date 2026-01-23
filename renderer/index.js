@@ -6,7 +6,7 @@
  */
 
 import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
-import { DiceIcon, GearIcon } from './components/Icons.js';
+import { DiceIcon, FilterIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { GenreFilter } from './components/GenreFilter.js';
 import { NowPlayingCard } from './components/NowPlayingCard.js';
@@ -1119,7 +1119,7 @@ function App() {
         disabled: !roon.state.paired,
         title: 'Settings',
       },
-      e(GearIcon)
+      e(FilterIcon)
     )
   );
 
