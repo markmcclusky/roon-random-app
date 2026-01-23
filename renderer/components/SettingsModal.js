@@ -3,8 +3,8 @@
  * Displays application settings including artist exclusions
  */
 
-const { useState } = React;
-const { e } = window;
+// Get React from window (loaded via CDN)
+const { createElement: e, useState } = window.React;
 
 export function SettingsModal(props) {
   const { isOpen, onClose, excludedArtists, onUpdateExclusions } = props;
