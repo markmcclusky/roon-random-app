@@ -11,9 +11,7 @@ A desktop application for discovering music through intelligent random album sel
 - **Session Tracking**: Avoids repeating albums within the same session until all options are exhausted
 - **Multi-Genre Support**: Select multiple genres and subgenres for varied listening experiences
 
-### 🎯 Artist Exclusion Filtering (Testing)
-
-> **Feature Branch Only**: Available on `feature/artist-exclusion` branch for testing
+### 🎯 Artist Exclusion Filtering
 
 - **Exclude Specific Artists**: Prevent albums from selected artists from appearing in random selection
 - **Settings Modal**: Clean filter icon button opens settings for managing exclusions
@@ -173,13 +171,7 @@ The app will remember your settings. Switch back to auto-discovery anytime via t
 - **Mixed Selection**: Combine parent genres and specific subgenres for nuanced filtering
 - **Clear All**: Use the "Clear Selections" button to deselect all genres at once
 
-### Artist Exclusion (Testing - Feature Branch Only)
-
-> **Note**: This feature is currently on the `feature/artist-exclusion` branch and not yet in main releases.
-
-To test this feature:
-1. Check out the feature branch: `git checkout feature/artist-exclusion`
-2. Run the app in development mode: `npm run dev`
+### Artist Exclusion
 
 **Managing Artist Exclusions:**
 1. Click the **filter icon** button in the toolbar (next to "Play Random Album")
