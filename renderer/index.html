@@ -638,6 +638,44 @@
         }
       }
 
+      /* ==================== MODAL COMPONENTS ==================== */
+
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+      }
+
+      .modal-content {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+
+      .modal-content h2 {
+        margin: 0 0 16px;
+        font-size: 20px;
+      }
+
+      .modal-content h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
       /* ==================== UTILITY CLASSES ==================== */
 
       .list {

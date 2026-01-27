@@ -32,7 +32,10 @@ const WINDOW_CONFIG = {
 const STORE_DEFAULTS = {
   token: null, // Roon authentication token
   lastZoneId: null, // Last selected output zone
-  filters: { genres: [] }, // Genre filter settings
+  filters: {
+    genres: [], // Genre filter settings
+    excludedArtists: [], // Artists to exclude from random selection
+  },
   activityData: {
     // Activity persistence data structure
     activity: [],

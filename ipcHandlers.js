@@ -131,6 +131,15 @@ function registerStateHandlers(store, mainWindow) {
       }
     }
 
+    // Validate excludedArtists array if present
+    if (filters.excludedArtists !== undefined) {
+      if (!Validators.isArtistArray(filters.excludedArtists)) {
+        throw new Error(
+          'Invalid filters.excludedArtists: must be an array of strings with max 100 items'
+        );
+      }
+    }
+
     return RoonService.setFilters(filters);
   });
 }

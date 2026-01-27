@@ -11,6 +11,18 @@ A desktop application for discovering music through intelligent random album sel
 - **Session Tracking**: Avoids repeating albums within the same session until all options are exhausted
 - **Multi-Genre Support**: Select multiple genres and subgenres for varied listening experiences
 
+### 🎯 Artist Exclusion Filtering (Testing)
+
+> **Feature Branch Only**: Available on `feature/artist-exclusion` branch for testing
+
+- **Exclude Specific Artists**: Prevent albums from selected artists from appearing in random selection
+- **Settings Modal**: Clean filter icon button opens settings for managing exclusions
+- **Add/Remove Artists**: Simple interface to add artists by name or remove them individually
+- **Clear All**: Quickly remove all exclusions with confirmation
+- **Persistent Storage**: Exclusions persist across app restarts
+- **Smart Matching**: Case-insensitive matching handles collaborations ("Artist1 / Artist2")
+- **Helpful Feedback**: Clear error message when all available albums are from excluded artists
+
 ### 🌐 Manual Connection (Beta)
 
 > **New in v1.7.0b**: Connect to Roon Core via IP address
@@ -160,6 +172,28 @@ The app will remember your settings. Switch back to auto-discovery anytime via t
 - **Album Counts**: Numbers show how many albums each genre and subgenre contains
 - **Mixed Selection**: Combine parent genres and specific subgenres for nuanced filtering
 - **Clear All**: Use the "Clear Selections" button to deselect all genres at once
+
+### Artist Exclusion (Testing - Feature Branch Only)
+
+> **Note**: This feature is currently on the `feature/artist-exclusion` branch and not yet in main releases.
+
+To test this feature:
+1. Check out the feature branch: `git checkout feature/artist-exclusion`
+2. Run the app in development mode: `npm run dev`
+
+**Managing Artist Exclusions:**
+1. Click the **filter icon** button in the toolbar (next to "Play Random Album")
+2. Enter an artist name in the text field
+3. Click **Add** to exclude that artist from random selection
+4. Use **Remove** to delete individual exclusions
+5. Click **Clear All** to remove all exclusions at once
+
+**How It Works:**
+- Albums from excluded artists will be automatically skipped during random selection
+- Works with genre filtering - both filters apply together
+- Case-insensitive matching (e.g., "beatles" matches "The Beatles")
+- Handles collaborations by matching the primary artist name
+- If all available albums are from excluded artists, you'll see a helpful error message
 
 ### Artist Exploration
 

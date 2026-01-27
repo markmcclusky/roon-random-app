@@ -1455,11 +1455,30 @@ async function selectRandomAlbum(targetKey) {
     throw new Error('Album list is empty.');
   }
 
+  // Get excluded artists from filters
+  const filters = getFilters();
+  const excludedArtists = filters?.excludedArtists || [];
+
+  // Helper function to check if artist is excluded
+  const isArtistExcluded = artistName => {
+    if (!artistName || excludedArtists.length === 0) return false;
+
+    // Extract primary artist from collaborations ("Artist1 / Artist2")
+    const primaryArtist = artistName.includes(' / ')
+      ? artistName.split(' / ')[0].trim()
+      : artistName;
+
+    const artistLower = primaryArtist.toLowerCase().trim();
+    return excludedArtists.some(
+      excluded => excluded.toLowerCase().trim() === artistLower
+    );
+  };
+
   let selectedAlbum = null;
   const maxAttempts =
     Math.min(totalAlbums, MAX_RANDOM_ATTEMPTS) + playedThisSession.size;
 
-  // Try to find an unplayed album
+  // Try to find an unplayed album (NOT from excluded artists)
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const randomIndex = Math.floor(Math.random() * totalAlbums);
     const albumPage = await loadAsync({
@@ -1472,28 +1491,51 @@ async function selectRandomAlbum(targetKey) {
     const candidate = albumPage.items?.[0];
     if (candidate) {
       const albumKey = createAlbumKey(candidate.title, candidate.subtitle);
-      if (!playedThisSession.has(albumKey)) {
+      const artistExcluded = isArtistExcluded(candidate.subtitle);
+
+      // Accept candidate if: not played this session AND not excluded artist
+      if (!playedThisSession.has(albumKey) && !artistExcluded) {
         selectedAlbum = candidate;
         break;
       }
     }
   }
 
-  // If no unplayed album found, clear history and try once more
+  // If no unplayed album found, clear history and try harder
   if (!selectedAlbum) {
     playedThisSession.clear();
 
-    const randomIndex = Math.floor(Math.random() * totalAlbums);
-    const albumPage = await loadAsync({
-      hierarchy: 'browse',
-      item_key: targetKey,
-      offset: randomIndex,
-      count: 1,
-    });
+    // Try harder to find non-excluded album
+    let fallbackAttempts = 0;
+    while (!selectedAlbum && fallbackAttempts < MAX_RANDOM_ATTEMPTS) {
+      const randomIndex = Math.floor(Math.random() * totalAlbums);
+      const albumPage = await loadAsync({
+        hierarchy: 'browse',
+        item_key: targetKey,
+        offset: randomIndex,
+        count: 1,
+      });
 
-    selectedAlbum = albumPage.items?.[0];
+      const candidate = albumPage.items?.[0];
+      if (candidate) {
+        const artistExcluded = isArtistExcluded(candidate.subtitle);
+        if (!artistExcluded) {
+          selectedAlbum = candidate;
+          break;
+        }
+      }
+      fallbackAttempts++;
+    }
+
+    // Final fallback: if ALL artists are excluded, throw helpful error
     if (!selectedAlbum) {
-      throw new Error('Could not find an album after resetting session.');
+      if (excludedArtists.length > 0) {
+        throw new Error(
+          'No albums available. All albums in this selection are from excluded artists. Try removing some artist exclusions in settings.'
+        );
+      } else {
+        throw new Error('Could not find an album after resetting session.');
+      }
     }
   }
 
@@ -1987,7 +2029,9 @@ export function getFilters() {
 export function setFilters(filters) {
   const current = getFilters();
   let nextGenres;
+  let nextExcludedArtists;
 
+  // Handle genres
   if (Array.isArray(filters?.genres)) {
     nextGenres = filters.genres.map(s => String(s).trim()).filter(Boolean);
   } else if (
@@ -1999,7 +2043,26 @@ export function setFilters(filters) {
     nextGenres = Array.isArray(current?.genres) ? current.genres : [];
   }
 
-  const updatedFilters = { genres: nextGenres };
+  // Handle excludedArtists
+  if (Array.isArray(filters?.excludedArtists)) {
+    nextExcludedArtists = filters.excludedArtists
+      .map(s => String(s).trim())
+      .filter(Boolean);
+  } else if (
+    filters &&
+    Object.prototype.hasOwnProperty.call(filters, 'excludedArtists')
+  ) {
+    nextExcludedArtists = [];
+  } else {
+    nextExcludedArtists = Array.isArray(current?.excludedArtists)
+      ? current.excludedArtists
+      : [];
+  }
+
+  const updatedFilters = {
+    genres: nextGenres,
+    excludedArtists: nextExcludedArtists,
+  };
   store.set('filters', updatedFilters);
   emitEvent({ type: 'filters', filters: updatedFilters });
 
