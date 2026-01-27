@@ -1,12 +1,12 @@
 # Comprehensive Code Review: Roon Random Album
 
-## Merged Analysis - December 2025
+## Merged Analysis - January 2026
 
 **Project:** Roon Random Album
-**Current Version:** 1.6.0
-**Review Baseline:** Combined analysis from October-November 2025 + December 2025
-**Last Updated:** December 17, 2025 (Week 1: 100% ✅ | Week 2: 100% ✅ | Core Tests: ✅)
-**Total Lines Reviewed:** ~3,900 core code + tests
+**Current Version:** 1.8.0
+**Review Baseline:** Combined analysis from October-November 2025 + December 2025 + January 2026
+**Last Updated:** January 23, 2026 (Week 1: 100% ✅ | Week 2: 100% ✅ | Core Tests: ✅ | v1.8.0 Features: ✅)
+**Total Lines Reviewed:** ~4,300 core code + tests
 
 ---
 
@@ -42,6 +42,17 @@ This comprehensive review documents the evolution of the Roon Random Album Elect
 - ✅ AppError classes (typed error handling)
 - ✅ Comprehensive documentation (inline comments)
 - ✅ Test coverage explosion (106 → 171 tests, +61%)
+
+**v1.7.5 - v1.8.0 (Artist Exclusion Filtering):**
+
+- ✅ Artist exclusion filtering functionality
+- ✅ Settings modal with FilterIcon component
+- ✅ Persistent storage for exclusions (filters.excludedArtists)
+- ✅ Artist array validation (validators.js)
+- ✅ Case-insensitive matching with collaboration support
+- ✅ Smart filtering in selectRandomAlbum()
+- ✅ Clear All with confirmation dialog
+- ✅ Comprehensive documentation in README
 
 ### Strengths ⭐
 
