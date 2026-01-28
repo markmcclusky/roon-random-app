@@ -43,7 +43,7 @@ vi.mock('fs', () => ({
 
 // Mock Roon API modules
 vi.mock('node-roon-api', () => {
-  const RoonApi = vi.fn(function (opts) {
+  const RoonApi = vi.fn(function (_opts) {
     this.init_services = vi.fn();
     this.start_discovery = vi.fn();
     this.save_config = vi.fn();
@@ -54,7 +54,7 @@ vi.mock('node-roon-api', () => {
 });
 
 vi.mock('node-roon-api-browse', () => {
-  const RoonApiBrowse = vi.fn(function (roonApi) {
+  const RoonApiBrowse = vi.fn(function (_roonApi) {
     this.browse = vi.fn();
     return this;
   });
@@ -62,7 +62,7 @@ vi.mock('node-roon-api-browse', () => {
 });
 
 vi.mock('node-roon-api-transport', () => {
-  const RoonApiTransport = vi.fn(function (roonApi) {
+  const RoonApiTransport = vi.fn(function (_roonApi) {
     this.subscribe_zones = vi.fn();
     this.control = vi.fn();
     this.seek = vi.fn();
@@ -72,7 +72,7 @@ vi.mock('node-roon-api-transport', () => {
 });
 
 vi.mock('node-roon-api-image', () => {
-  const RoonApiImage = vi.fn(function (roonApi) {
+  const RoonApiImage = vi.fn(function (_roonApi) {
     this.get_image = vi.fn();
     return this;
   });

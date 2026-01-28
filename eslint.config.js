@@ -7,6 +7,16 @@ import prettierConfig from 'eslint-config-prettier';
 export default [
   js.configs.recommended,
   {
+    ignores: [
+      'node_modules/**',
+      'out/**',
+      'dist/**',
+      '.electron-forge/**',
+      'explore-*.js',
+      'summarize-controls.js',
+    ],
+  },
+  {
     files: ['**/*.js', '**/*.jsx'],
     languageOptions: {
       ecmaVersion: 2022,
@@ -48,7 +58,13 @@ export default [
     },
     rules: {
       // ESLint recommended overrides
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
       'no-console': 'off', // Allow console statements in Node.js/Electron app
 
       // React rules

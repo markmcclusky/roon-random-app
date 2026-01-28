@@ -2,6 +2,21 @@
 
 A desktop application for discovering music through intelligent random album selection from your Roon library. Built with Electron and React, this app connects to your Roon Core to provide weighted genre filtering, artist exploration, and smart session tracking.
 
+## Table of Contents
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Installation](#installation)
+- [Setup](#setup)
+- [Usage](#usage)
+- [Architecture](#architecture)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Technical Notes](#technical-notes)
+- [Contributing](#contributing)
+- [Support](#support)
+
 ## Features
 
 ### 🎲 Smart Random Album Selection
@@ -21,9 +36,9 @@ A desktop application for discovering music through intelligent random album sel
 - **Smart Matching**: Case-insensitive matching handles collaborations ("Artist1 / Artist2")
 - **Helpful Feedback**: Clear error message when all available albums are from excluded artists
 
-### 🌐 Manual Connection (Beta)
+### 🌐 Manual Connection
 
-> **New in v1.7.0b**: Connect to Roon Core via IP address
+> **New in v1.7.0**: Connect to Roon Core via IP address
 
 - **Auto-discovery or Manual**: Choose between automatic network discovery or manual IP configuration
 - **Reliable Connection**: Ideal for complex networks, VPNs, or when auto-discovery fails
@@ -36,7 +51,17 @@ A desktop application for discovering music through intelligent random album sel
 - **Interactive Progress Bar**: Click anywhere on the progress bar to seek to that position in the track
 - **Transport Controls**: Play, pause, next, previous with keyboard shortcuts
 - **Volume Control**: Integrated volume slider for supported zones with mute function
+- **Manual Refresh**: Refresh now-playing status to sync with latest Roon state
 - **Blurred Background**: Subtle blurred album art backdrop enhances visual appeal
+
+### 📚 Profile/Library Switching
+
+- **Multiple Library Support**: Switch between different Roon profiles if your setup has multiple music libraries
+- **Quick Switching**: Select different profiles from the toolbar to access separate collections
+- **Seamless Transition**: Profile changes update available zones and content automatically
+- **Automatic Detection**: Profiles appear only when your Roon setup has multiple libraries configured
+
+**Note**: This feature is only available for Roon installations with multiple profiles configured in Roon Settings.
 
 ### 🎨 Artist Discovery
 
@@ -52,23 +77,46 @@ A desktop application for discovering music through intelligent random album sel
 
 ### ⌨️ Keyboard Shortcuts
 
-- `Space` - Play/Pause
+**Playback Controls:**
+
+- `Space` - Play/Pause current track
 - `→` - Next track
 - `←` - Previous track
-- `R` - Play random album
-- `A` - More from current artist
+
+**Album Discovery:**
+
+- `R` - Play random album (respects genre filters and artist exclusions)
+- `A` - More from current artist (intelligent cycling through discography)
+
+**Note**: Keyboard shortcuts work when the app window is focused.
 
 ## Screenshots
 
+### Main Interface
+
 ![Main Interface](screenshots/mainscreenshot.png)
 
-The app features a clean three-column layout:
+_The app features a clean three-column layout with adaptive light/dark theme based on system preferences._
 
-- **Left**: Now Playing with cover art and transport controls
-- **Center**: Genre filter with toggleable selection, expandable subgenres, and album counts
-- **Right**: Activity feed showing albums recently played albums from within the app. Clicking album plays it again.
+**Layout:**
+
+- **Left Column**: Now Playing with album art, transport controls, and volume slider
+- **Center Column**: Genre filter with toggleable selection, expandable subgenres (for genres with 50+ albums), and album counts
+- **Right Column**: Activity feed showing recently played albums with replay functionality
+
+**Additional Views:**
+
+- Settings modal for artist exclusion management
+- Manual connection configuration dialog
+- Profile/library switching (when multiple Roon profiles configured)
 
 ## Installation
+
+### System Requirements
+
+- **macOS**: 12.0 (Monterey) or later
+- **Windows**: Windows 10 (64-bit) or later
+- **Roon**: Active Roon subscription and Roon Core running on your network
 
 ### Option 1: Download Pre-built Releases
 
@@ -87,9 +135,9 @@ If you get an error message stating that the app is damaged and can't be opened,
 #### Windows
 
 1. Download the `.msi` file from the [Releases](https://github.com/markmcc/roon-random-app/releases) page
-   - File name format: `Roon-Random-Album-x.x.x.msi` (e.g., `Roon-Random-Album-1.6.8.msi`)
+   - File name format: `Roon-Random-Album-x.x.x.msi` (e.g., `Roon-Random-Album-1.8.0.msi`)
 2. Double-click the MSI file to launch the installer wizard
-   - **Note**: Windows SmartScreen may show a warning because the app is currently unsigned
+   - **Note**: Windows SmartScreen may show a warning. The app is built and packaged automatically but does not include an EV code signing certificate. This is normal for open-source Electron apps.
    - Click "More info" then "Run anyway" to proceed with installation
 3. Follow the installation wizard:
    - Choose installation location (default: `C:\Program Files\RoonRandomAlbum\`)
@@ -135,7 +183,7 @@ The app uses Roon's official API and requires authorization:
 - Pairing status is displayed in the top toolbar
 - No manual configuration required for auto-discovery
 
-### Manual Connection (Beta)
+### Manual Connection
 
 If auto-discovery doesn't work (VPN, complex network, firewall), use manual connection:
 
@@ -148,8 +196,6 @@ If auto-discovery doesn't work (VPN, complex network, firewall), use manual conn
 7. Click **Save & Reconnect**
 
 The app will remember your settings. Switch back to auto-discovery anytime via the dropdown.
-
-**Note**: Manual connection is currently in beta. Please report any issues on GitHub.
 
 ## Usage
 
@@ -174,6 +220,7 @@ The app will remember your settings. Switch back to auto-discovery anytime via t
 ### Artist Exclusion
 
 **Managing Artist Exclusions:**
+
 1. Click the **filter icon** button in the toolbar (next to "Play Random Album")
 2. Enter an artist name in the text field
 3. Click **Add** to exclude that artist from random selection
@@ -181,6 +228,7 @@ The app will remember your settings. Switch back to auto-discovery anytime via t
 5. Click **Clear All** to remove all exclusions at once
 
 **How It Works:**
+
 - Albums from excluded artists will be automatically skipped during random selection
 - Works with genre filtering - both filters apply together
 - Case-insensitive matching (e.g., "beatles" matches "The Beatles")
@@ -199,6 +247,16 @@ The app will remember your settings. Switch back to auto-discovery anytime via t
 - Click any album to replay it instantly
 - Timestamps show when each album was played
 - Feed persists across sessions
+
+### Profile Switching
+
+**If you have multiple Roon profiles configured:**
+
+1. Click the **Profile** dropdown in the toolbar
+2. Select a different profile to switch music libraries
+3. Available zones and content will update automatically
+
+**Note**: This option only appears when your Roon setup has multiple profiles configured. Most users have a single profile and won't see this option.
 
 ## Architecture
 
@@ -258,6 +316,13 @@ node --version  # Should be 16.0.0 or higher
 npm --version   # Should be 8.0.0 or higher
 ```
 
+### Technical Requirements
+
+- **Node.js**: 16.0.0 or higher (18.x or 20.x recommended for development)
+- **npm**: 8.0.0 or higher
+- **Electron**: 30.x (automatically installed with dependencies)
+- **Roon Core**: Active Roon subscription and Roon Core running on your network
+
 ### Available Scripts
 
 - `npm start` - Run the app in production mode
@@ -266,8 +331,11 @@ npm --version   # Should be 8.0.0 or higher
 - `npm run package` - Package without creating installers
 - `npm test` - Run tests in watch mode
 - `npm run test:run` - Run tests once (CI mode)
+- `npm run test:ui` - Run tests with Vitest UI (interactive mode)
 - `npm run lint` - Check for linting issues
 - `npm run lint:fix` - Auto-fix linting issues
+- `npm run format` - Format code with Prettier
+- `npm run format:check` - Check code formatting without making changes
 
 ### Building Distribution
 
@@ -308,9 +376,13 @@ npm run test:ui   # Run tests with UI
 
 Test files are located in the `test/` directory and cover:
 
-- Input validation utilities
-- Roon helper functions
-- Activity management logic
+- Input validation utilities (`validators.test.js`)
+- Roon helper functions (`roonHelpers.test.js`)
+- Activity management logic (`activityHelpers.test.js`)
+- Roon service core logic (`roonService.test.js`)
+- Text formatting utilities (`formatting.test.js`)
+- Error handling classes (`AppError.test.js`)
+- Activity service integration (`ActivityService.test.js`)
 
 ## Troubleshooting
 
@@ -341,6 +413,13 @@ Test files are located in the `test/` directory and cover:
 - Implements proper pairing and discovery protocols
 - Handles real-time zone and transport updates
 - Respects Roon's browsing and playback APIs
+
+### Performance Optimizations
+
+- **Image Caching**: Album artwork is cached in memory with LRU eviction to minimize Roon API calls
+- **Genre Caching**: Genre lists are cached for 1 hour to improve responsiveness
+- **Session History**: Up to 1,000 recently played albums tracked in memory to avoid repeats
+- **Smart Prefetching**: Album metadata is prefetched during browsing for instant playback
 
 ### Security
 

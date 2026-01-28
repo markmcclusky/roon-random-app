@@ -111,19 +111,21 @@ function decryptTokens(encryptedTokens) {
  * Reads configuration file asynchronously
  * @returns {Promise<Object>} Configuration object
  */
-async function readConfigFile() {
-  try {
-    const data = await fsPromises.readFile(ROON_CONFIG_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      // File doesn't exist, return empty config
-      return {};
-    }
-    console.error('Failed to read config file:', error);
-    return {};
-  }
-}
+// Note: Currently unused - Roon API handles config management internally
+// Keeping for potential future use with manual configuration
+// async function readConfigFile() {
+//   try {
+//     const data = await fsPromises.readFile(ROON_CONFIG_PATH, 'utf8');
+//     return JSON.parse(data);
+//   } catch (error) {
+//     if (error.code === 'ENOENT') {
+//       // File doesn't exist, return empty config
+//       return {};
+//     }
+//     console.error('Failed to read config file:', error);
+//     return {};
+//   }
+// }
 
 /**
  * Writes configuration file atomically to prevent corruption
