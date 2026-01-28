@@ -107,6 +107,9 @@ _The app features a clean three-column layout with adaptive light/dark theme bas
 **Additional Views:**
 
 - Settings modal for artist exclusion management
+
+![Artist Exclusion](screenshots/artistexclude.png)
+
 - Manual connection configuration dialog
 - Profile/library switching (when multiple Roon profiles configured)
 
