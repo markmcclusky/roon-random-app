@@ -46,6 +46,25 @@ const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
 // In-memory config cache for synchronous Roon API callbacks
 let configCache = null;
 let configWritePending = false;
+let configDirty = false;
+
+function queueConfigWrite() {
+  if (configWritePending || !configDirty) {
+    return;
+  }
+
+  configWritePending = true;
+  configDirty = false;
+
+  writeConfigFile(configCache)
+    .catch(error => {
+      console.error('Background config write failed:', error);
+    })
+    .finally(() => {
+      configWritePending = false;
+      queueConfigWrite();
+    });
+}
 
 // ==================== ENCRYPTION HELPERS ====================
 
@@ -407,17 +426,8 @@ function createRoonApi() {
       configCache.roonstate = state; // { tokens: { [core_id]: token }, paired_core_id: "..." }
 
       // Write to disk asynchronously in background (non-blocking)
-      if (!configWritePending) {
-        configWritePending = true;
-        writeConfigFile(configCache)
-          .then(() => {
-            configWritePending = false;
-          })
-          .catch(error => {
-            console.error('Background config write failed:', error);
-            configWritePending = false;
-          });
-      }
+      configDirty = true;
+      queueConfigWrite();
     },
 
     core_paired: handleCorePaired,

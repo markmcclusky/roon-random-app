@@ -5,7 +5,7 @@
  */
 
 // Get React from window (loaded via CDN)
-const { createElement: e } = window.React;
+const { createElement: e, useRef } = window.React;
 
 // Import utilities
 import { smartQuotes, formatTime } from '../utils/formatting.js';
@@ -46,6 +46,32 @@ export function NowPlayingCard(props) {
     onMoreFromArtist,
     onProgressBarClick,
   } = props;
+  const volumeCommitTimeoutRef = useRef(null);
+  const latestVolumeRef = useRef(null);
+
+  function scheduleVolumeCommit(value) {
+    latestVolumeRef.current = value;
+    if (volumeCommitTimeoutRef.current) {
+      clearTimeout(volumeCommitTimeoutRef.current);
+    }
+
+    volumeCommitTimeoutRef.current = setTimeout(() => {
+      if (latestVolumeRef.current !== null) {
+        roon.changeVolume(latestVolumeRef.current);
+      }
+    }, 150);
+  }
+
+  function flushVolumeCommit() {
+    if (volumeCommitTimeoutRef.current) {
+      clearTimeout(volumeCommitTimeoutRef.current);
+      volumeCommitTimeoutRef.current = null;
+    }
+
+    if (latestVolumeRef.current !== null) {
+      roon.changeVolume(latestVolumeRef.current);
+    }
+  }
 
   return e(
     'div',
@@ -261,8 +287,15 @@ export function NowPlayingCard(props) {
               step: currentZone.volume.step,
               value:
                 localVolume !== null ? localVolume : currentZone.volume.value,
-              onInput: event => setLocalVolume(event.target.value),
-              onChange: event => roon.changeVolume(event.target.value),
+              onInput: event => {
+                const { value } = event.target;
+                setLocalVolume(value);
+                scheduleVolumeCommit(value);
+              },
+              onMouseUp: flushVolumeCommit,
+              onTouchEnd: flushVolumeCommit,
+              onKeyUp: flushVolumeCommit,
+              onBlur: flushVolumeCommit,
               style: {
                 width: `${VOLUME_SLIDER_WIDTH}px`,
                 transform: 'translateY(2px)', // Visual alignment with transport buttons

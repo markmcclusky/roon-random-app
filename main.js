@@ -6,7 +6,7 @@
  * the main and renderer processes.
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import path from 'path';
 import Store from 'electron-store';
 import { fileURLToPath } from 'url';
@@ -128,7 +128,6 @@ function initializeBackendServices() {
     console.error('Failed to initialize backend services:', error);
 
     // Show error dialog to user
-    const { dialog } = require('electron');
     dialog.showErrorBox(
       'Initialization Error',
       `Failed to start Roon Random Album: ${error.message}`

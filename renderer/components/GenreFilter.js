@@ -99,7 +99,7 @@ export function GenreFilter(props) {
    */
   async function loadSubgenres(genreTitle) {
     try {
-      const subgenres = await window.roon.getSubgenres(genreTitle);
+      const subgenres = await roon.getSubgenres(genreTitle);
       setSubgenresCache(prev => new Map(prev.set(genreTitle, subgenres)));
     } catch (error) {
       console.error(`Failed to load subgenres for ${genreTitle}:`, error);
