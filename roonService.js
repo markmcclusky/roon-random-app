@@ -285,8 +285,17 @@ let store = null;
  * @param {Object} payload - Event data to send
  */
 function emitEvent(payload) {
-  if (mainWindow?.webContents) {
-    mainWindow.webContents.send('roon:event', payload);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const contents = mainWindow.webContents;
+  if (!contents || contents.isDestroyed()) return;
+
+  try {
+    contents.send('roon:event', payload);
+  } catch (error) {
+    console.warn(
+      '[emitEvent] Failed to send IPC event:',
+      error?.message || error
+    );
   }
 }
 
