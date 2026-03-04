@@ -62,6 +62,29 @@ const IPC_CHANNELS = {
   REMOVE_ACTIVITY: 'roon:removeActivity',
 };
 
+const RATE_LIMITS_MS = {
+  LIST_GENRES: 1000,
+  GET_SUBGENRES: 500,
+  PLAY_RANDOM_ALBUM: 500,
+  PLAY_ALBUM_BY_NAME: 500,
+  PLAY_RANDOM_ALBUM_BY_ARTIST: 500,
+  GET_IMAGE: 100,
+};
+
+function createRateLimitedHandler(channel, intervalMs, handler) {
+  let lastCalled = 0;
+
+  return async (...args) => {
+    const now = Date.now();
+    if (now - lastCalled < intervalMs) {
+      throw new Error(`Rate limit exceeded for ${channel}`);
+    }
+
+    lastCalled = now;
+    return handler(...args);
+  };
+}
+
 // ==================== STATE & CONFIGURATION HANDLERS ====================
 
 /**
@@ -360,56 +383,77 @@ function registerMusicHandlers() {
    * Returns list of available genres with album counts
    * @returns {Promise<Array>} Array of genre objects
    */
-  ipcMain.handle(IPC_CHANNELS.LIST_GENRES, async () => {
-    try {
-      return await RoonService.listGenres();
-    } catch (error) {
-      console.error('Failed to list genres:', error);
-      throw error;
-    }
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.LIST_GENRES,
+    createRateLimitedHandler(
+      IPC_CHANNELS.LIST_GENRES,
+      RATE_LIMITS_MS.LIST_GENRES,
+      async () => {
+        try {
+          return await RoonService.listGenres();
+        } catch (error) {
+          console.error('Failed to list genres:', error);
+          throw error;
+        }
+      }
+    )
+  );
 
   /**
    * Fetches subgenres for a specific genre
    * @param {string} genreTitle - The title of the parent genre
    * @returns {Promise<Array>} Array of subgenre objects with 10+ albums
    */
-  ipcMain.handle(IPC_CHANNELS.GET_SUBGENRES, async (_event, genreTitle) => {
-    // Validate genre title
-    if (!Validators.isNonEmptyString(genreTitle, 500)) {
-      throw new Error(
-        'Invalid genre title: must be a non-empty string with max 500 characters'
-      );
-    }
+  ipcMain.handle(
+    IPC_CHANNELS.GET_SUBGENRES,
+    createRateLimitedHandler(
+      IPC_CHANNELS.GET_SUBGENRES,
+      RATE_LIMITS_MS.GET_SUBGENRES,
+      async (_event, genreTitle) => {
+        // Validate genre title
+        if (!Validators.isNonEmptyString(genreTitle, 500)) {
+          throw new Error(
+            'Invalid genre title: must be a non-empty string with max 500 characters'
+          );
+        }
 
-    try {
-      return await RoonService.getSubgenres(genreTitle);
-    } catch (error) {
-      console.error(`Failed to get subgenres for ${genreTitle}:`, error);
-      throw error;
-    }
-  });
+        try {
+          return await RoonService.getSubgenres(genreTitle);
+        } catch (error) {
+          console.error(`Failed to get subgenres for ${genreTitle}:`, error);
+          throw error;
+        }
+      }
+    )
+  );
 
   /**
    * Picks and plays a random album based on genre filters
    * @param {Array} genres - Array of genre objects or strings to filter by
    * @returns {Promise<Object>} Album information and playback result
    */
-  ipcMain.handle(IPC_CHANNELS.PLAY_RANDOM_ALBUM, async (_event, genres) => {
-    // Validate genres array (can be empty, strings, or genre objects)
-    if (!Validators.isGenreArray(genres)) {
-      throw new Error(
-        'Invalid genres: must be an array of genre objects or strings with max 100 items'
-      );
-    }
+  ipcMain.handle(
+    IPC_CHANNELS.PLAY_RANDOM_ALBUM,
+    createRateLimitedHandler(
+      IPC_CHANNELS.PLAY_RANDOM_ALBUM,
+      RATE_LIMITS_MS.PLAY_RANDOM_ALBUM,
+      async (_event, genres) => {
+        // Validate genres array (can be empty, strings, or genre objects)
+        if (!Validators.isGenreArray(genres)) {
+          throw new Error(
+            'Invalid genres: must be an array of genre objects or strings with max 100 items'
+          );
+        }
 
-    try {
-      return await RoonService.pickRandomAlbumAndPlay(genres);
-    } catch (error) {
-      console.error('Failed to play random album:', error);
-      throw error;
-    }
-  });
+        try {
+          return await RoonService.pickRandomAlbumAndPlay(genres);
+        } catch (error) {
+          console.error('Failed to play random album:', error);
+          throw error;
+        }
+      }
+    )
+  );
 
   /**
    * Plays a specific album by name and artist
@@ -419,28 +463,32 @@ function registerMusicHandlers() {
    */
   ipcMain.handle(
     IPC_CHANNELS.PLAY_ALBUM_BY_NAME,
-    async (_event, albumTitle, artistName) => {
-      // Validate album title
-      if (!Validators.isNonEmptyString(albumTitle, 500)) {
-        throw new Error(
-          'Invalid album title: must be a non-empty string with max 500 characters'
-        );
-      }
+    createRateLimitedHandler(
+      IPC_CHANNELS.PLAY_ALBUM_BY_NAME,
+      RATE_LIMITS_MS.PLAY_ALBUM_BY_NAME,
+      async (_event, albumTitle, artistName) => {
+        // Validate album title
+        if (!Validators.isNonEmptyString(albumTitle, 500)) {
+          throw new Error(
+            'Invalid album title: must be a non-empty string with max 500 characters'
+          );
+        }
 
-      // Validate artist name
-      if (!Validators.isNonEmptyString(artistName, 500)) {
-        throw new Error(
-          'Invalid artist name: must be a non-empty string with max 500 characters'
-        );
-      }
+        // Validate artist name
+        if (!Validators.isNonEmptyString(artistName, 500)) {
+          throw new Error(
+            'Invalid artist name: must be a non-empty string with max 500 characters'
+          );
+        }
 
-      try {
-        return await RoonService.playAlbumByName(albumTitle, artistName);
-      } catch (error) {
-        console.error('Failed to play album by name:', error);
-        throw error;
+        try {
+          return await RoonService.playAlbumByName(albumTitle, artistName);
+        } catch (error) {
+          console.error('Failed to play album by name:', error);
+          throw error;
+        }
       }
-    }
+    )
   );
 
   /**
@@ -451,35 +499,39 @@ function registerMusicHandlers() {
    */
   ipcMain.handle(
     IPC_CHANNELS.PLAY_RANDOM_ALBUM_BY_ARTIST,
-    async (_event, artistName, currentAlbum) => {
-      // Validate artist name
-      if (!Validators.isNonEmptyString(artistName, 500)) {
-        throw new Error(
-          'Invalid artist name: must be a non-empty string with max 500 characters'
-        );
-      }
+    createRateLimitedHandler(
+      IPC_CHANNELS.PLAY_RANDOM_ALBUM_BY_ARTIST,
+      RATE_LIMITS_MS.PLAY_RANDOM_ALBUM_BY_ARTIST,
+      async (_event, artistName, currentAlbum) => {
+        // Validate artist name
+        if (!Validators.isNonEmptyString(artistName, 500)) {
+          throw new Error(
+            'Invalid artist name: must be a non-empty string with max 500 characters'
+          );
+        }
 
-      // Validate current album (can be null or string)
-      if (
-        currentAlbum !== null &&
-        currentAlbum !== undefined &&
-        !Validators.isNonEmptyString(currentAlbum, 500)
-      ) {
-        throw new Error(
-          'Invalid current album: must be null or a non-empty string with max 500 characters'
-        );
-      }
+        // Validate current album (can be null or string)
+        if (
+          currentAlbum !== null &&
+          currentAlbum !== undefined &&
+          !Validators.isNonEmptyString(currentAlbum, 500)
+        ) {
+          throw new Error(
+            'Invalid current album: must be null or a non-empty string with max 500 characters'
+          );
+        }
 
-      try {
-        return await RoonService.playRandomAlbumByArtist(
-          artistName,
-          currentAlbum
-        );
-      } catch (error) {
-        console.error('Failed to play random album by artist:', error);
-        throw error;
+        try {
+          return await RoonService.playRandomAlbumByArtist(
+            artistName,
+            currentAlbum
+          );
+        } catch (error) {
+          console.error('Failed to play random album by artist:', error);
+          throw error;
+        }
       }
-    }
+    )
   );
 }
 
@@ -496,26 +548,33 @@ function registerMediaHandlers(store) {
    * @param {Object} options - Image options (scale, width, height, format)
    * @returns {Promise<string|null>} Data URL or null if not found
    */
-  ipcMain.handle(IPC_CHANNELS.GET_IMAGE, async (_event, imageKey, options) => {
-    // Validate image key
-    if (!Validators.isNonEmptyString(imageKey, 500)) {
-      console.error('Invalid image key: must be a non-empty string');
-      return null;
-    }
+  ipcMain.handle(
+    IPC_CHANNELS.GET_IMAGE,
+    createRateLimitedHandler(
+      IPC_CHANNELS.GET_IMAGE,
+      RATE_LIMITS_MS.GET_IMAGE,
+      async (_event, imageKey, options) => {
+        // Validate image key
+        if (!Validators.isNonEmptyString(imageKey, 500)) {
+          console.error('Invalid image key: must be a non-empty string');
+          return null;
+        }
 
-    // Validate options if provided
-    if (options !== undefined && !Validators.isObject(options)) {
-      console.error('Invalid image options: must be an object');
-      return null;
-    }
+        // Validate options if provided
+        if (options !== undefined && !Validators.isObject(options)) {
+          console.error('Invalid image options: must be an object');
+          return null;
+        }
 
-    try {
-      return await RoonService.getImageDataUrl(imageKey, options);
-    } catch (error) {
-      console.error('Failed to get image:', error);
-      return null;
-    }
-  });
+        try {
+          return await RoonService.getImageDataUrl(imageKey, options);
+        } catch (error) {
+          console.error('Failed to get image:', error);
+          return null;
+        }
+      }
+    )
+  );
 
   /**
    * Sends transport control commands (play, pause, next, previous)
