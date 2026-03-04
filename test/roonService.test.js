@@ -92,7 +92,9 @@ describe('RoonService - Core Business Logic', () => {
 
     // Initialize with mock window and store
     const mockWindow = {
+      isDestroyed: vi.fn().mockReturnValue(false),
       webContents: {
+        isDestroyed: vi.fn().mockReturnValue(false),
         send: vi.fn(),
       },
     };
