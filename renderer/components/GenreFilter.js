@@ -136,7 +136,11 @@ export function GenreFilter(props) {
           flexShrink: 0,
         },
       },
-      e('h2', { style: { margin: 0, marginBottom: 10 } }, 'Filter by Genre'),
+      e(
+        'h2',
+        { style: { margin: 0, marginBottom: 10 } },
+        'Filter Albums by Genre'
+      ),
       e(
         'button',
         {

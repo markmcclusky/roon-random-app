@@ -39,17 +39,12 @@ export function SettingsModal(props) {
         className: 'modal-content',
         onClick: evt => evt.stopPropagation(), // Prevent closing when clicking inside
       },
-      e('h2', null, 'Settings'),
+      e('h2', null, 'Filter by Artist'),
 
       // Artist Exclusions Section
       e(
         'div',
         { style: { marginTop: '24px' } },
-        e(
-          'h3',
-          { style: { fontSize: '16px', marginBottom: '12px' } },
-          'Excluded Artists'
-        ),
         e(
           'p',
           {
@@ -92,6 +87,12 @@ export function SettingsModal(props) {
               'Add'
             )
           )
+        ),
+
+        e(
+          'h3',
+          { style: { fontSize: '16px', marginBottom: '12px' } },
+          'Excluded Artists'
         ),
 
         // Clear All button
