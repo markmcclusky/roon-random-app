@@ -285,6 +285,7 @@
         border-radius: 2px;
       }
 
+
       /* Progress bar styling */
       .progress-container {
         display: flex;
@@ -306,7 +307,6 @@
         height: 4px;
         background: var(--border);
         border-radius: 2px;
-        overflow: hidden;
         position: relative;
       }
 
@@ -316,6 +316,24 @@
         width: 0%;
         transition: width 0.1s linear;
         border-radius: 2px;
+        position: relative;
+      }
+
+      .progress-fill::after {
+        content: '';
+        position: absolute;
+        right: -5px;
+        top: 50%;
+        transform: translateY(-50%) scale(0);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #6b7280;
+        transition: transform 0.15s ease;
+      }
+
+      .progress-bar:hover .progress-fill::after {
+        transform: translateY(-50%) scale(1);
       }
 
       /* Volume slider - Webkit only styling for Electron */
@@ -457,16 +475,17 @@
         appearance: none;
         background: none;
         border: none;
-        padding: 0;
+        padding: 6px;
+        border-radius: 50%;
         cursor: pointer;
         line-height: 0;
+        transition: background-color 0.15s ease;
       }
 
       .btn-icon img {
         width: 36px;
         height: 36px;
         object-fit: contain;
-        transition: opacity 0.15s ease-in-out;
       }
 
       .btn-playpause img {
@@ -474,8 +493,14 @@
         height: 52px;
       }
 
-      .btn-icon:hover img {
-        opacity: 0.5;
+      .btn-icon:hover {
+        background-color: rgba(0, 0, 0, 0.06);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .btn-icon:hover {
+          background-color: rgba(255, 255, 255, 0.1);
+        }
       }
 
       .btn-icon:disabled {

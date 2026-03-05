@@ -539,6 +539,13 @@ function App() {
   // Settings modal state (for artist exclusions)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
+  // Tick state to force relative timestamp re-renders every 60 seconds
+  const [, setTimestampTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTimestampTick(n => n + 1), 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Load connection settings on mount
   useEffect(() => {
     async function loadConnectionSettings() {
@@ -636,34 +643,34 @@ function App() {
         );
 
         // Convert persisted activity to UI format (with album art)
-        const activityWithArt = await Promise.all(
-          (persistedActivity || [])
-            .slice(0, ACTIVITY_HISTORY_LIMIT)
-            .map(async item => {
-              let artUrl = null;
+        // Fetch images sequentially to avoid hitting the rate limiter
+        const activityWithArt = [];
+        for (const item of (persistedActivity || []).slice(
+          0,
+          ACTIVITY_HISTORY_LIMIT
+        )) {
+          let artUrl = null;
 
-              // Fetch album art if we have an image key
-              if (item.imageKey) {
-                try {
-                  artUrl = await window.roon.getImage(item.imageKey);
-                } catch (error) {
-                  console.warn(
-                    `Failed to load album art for ${item.title}:`,
-                    error
-                  );
-                }
-              }
+          if (item.imageKey) {
+            try {
+              artUrl = await window.roon.getImage(item.imageKey);
+            } catch (error) {
+              console.warn(
+                `Failed to load album art for ${item.title}:`,
+                error
+              );
+            }
+          }
 
-              return {
-                id: item.id, // Preserve ID for removal
-                title: item.title,
-                subtitle: item.subtitle,
-                art: artUrl,
-                t: item.timestamp,
-                key: item.key || createActivityKey(item.title, item.subtitle),
-              };
-            })
-        );
+          activityWithArt.push({
+            id: item.id,
+            title: item.title,
+            subtitle: item.subtitle,
+            art: artUrl,
+            t: item.timestamp,
+            key: item.key || createActivityKey(item.title, item.subtitle),
+          });
+        }
 
         setActivity(activityWithArt);
       } catch (error) {

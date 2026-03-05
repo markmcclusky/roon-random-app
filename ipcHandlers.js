@@ -68,7 +68,6 @@ const RATE_LIMITS_MS = {
   PLAY_RANDOM_ALBUM: 500,
   PLAY_ALBUM_BY_NAME: 500,
   PLAY_RANDOM_ALBUM_BY_ARTIST: 500,
-  GET_IMAGE: 100,
 };
 
 function createRateLimitedHandler(channel, intervalMs, handler) {
@@ -548,33 +547,26 @@ function registerMediaHandlers(store) {
    * @param {Object} options - Image options (scale, width, height, format)
    * @returns {Promise<string|null>} Data URL or null if not found
    */
-  ipcMain.handle(
-    IPC_CHANNELS.GET_IMAGE,
-    createRateLimitedHandler(
-      IPC_CHANNELS.GET_IMAGE,
-      RATE_LIMITS_MS.GET_IMAGE,
-      async (_event, imageKey, options) => {
-        // Validate image key
-        if (!Validators.isNonEmptyString(imageKey, 500)) {
-          console.error('Invalid image key: must be a non-empty string');
-          return null;
-        }
+  ipcMain.handle(IPC_CHANNELS.GET_IMAGE, async (_event, imageKey, options) => {
+    // Validate image key
+    if (!Validators.isNonEmptyString(imageKey, 500)) {
+      console.error('Invalid image key: must be a non-empty string');
+      return null;
+    }
 
-        // Validate options if provided
-        if (options !== undefined && !Validators.isObject(options)) {
-          console.error('Invalid image options: must be an object');
-          return null;
-        }
+    // Validate options if provided
+    if (options !== undefined && !Validators.isObject(options)) {
+      console.error('Invalid image options: must be an object');
+      return null;
+    }
 
-        try {
-          return await RoonService.getImageDataUrl(imageKey, options);
-        } catch (error) {
-          console.error('Failed to get image:', error);
-          return null;
-        }
-      }
-    )
-  );
+    try {
+      return await RoonService.getImageDataUrl(imageKey, options);
+    } catch (error) {
+      console.error('Failed to get image:', error);
+      return null;
+    }
+  });
 
   /**
    * Sends transport control commands (play, pause, next, previous)
