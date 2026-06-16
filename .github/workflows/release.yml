@@ -308,6 +308,7 @@ jobs:
         run: npm run make -- --arch=x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: "electron-forge:*"
 
       # Find built files for release
       - name: Find build artifacts
