@@ -1,26 +1,16 @@
 // forge.config.cjs
-const fs = require('node:fs');
-
 const {
   AutoUnpackNativesPlugin,
 } = require('@electron-forge/plugin-auto-unpack-natives');
 
 const packageJson = require('./package.json');
 
-const legacyIcon = 'assets/icon';
-const legacyMacIcon = 'assets/icon.icns';
-const liquidGlassIcon = 'assets/icon.icon';
-const appIcon =
-  process.platform === 'darwin' && fs.existsSync(liquidGlassIcon)
-    ? [legacyMacIcon, liquidGlassIcon]
-    : legacyIcon;
-
 module.exports = {
   packagerConfig: {
     asar: true,
     appBundleId: 'com.markmcc.roonrandom',
     appCategoryType: 'public.app-category.music',
-    icon: appIcon,
+    icon: 'assets/icon',
     appCopyright: `Copyright © ${new Date().getFullYear()} ${packageJson.author.name}`,
     // Enable signing and notarization for CI/CD
     osxSign: process.env.CI
