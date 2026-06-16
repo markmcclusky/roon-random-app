@@ -243,7 +243,7 @@ jobs:
           echo "🚀 Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: build-macos # Wait for macOS job to create the release
 
     steps:
