@@ -154,7 +154,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create release first (without assets)
+          # Create release first (without assets); skip if it already exists
+          gh release view "${{ steps.version.outputs.TAG_NAME }}" &>/dev/null && echo "Release already exists, skipping creation" && exit 0
           gh release create "${{ steps.version.outputs.TAG_NAME }}" \
             --title "Roon Random Album ${{ steps.version.outputs.VERSION }}" \
             --notes "## Roon Random Album ${{ steps.version.outputs.VERSION }}
