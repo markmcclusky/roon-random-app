@@ -303,6 +303,21 @@ jobs:
           echo "Building version: $VERSION"
           echo "Using tag: $TAG_NAME"
 
+      # Diagnose environment before build
+      - name: Diagnose Windows build environment
+        shell: pwsh
+        run: |
+          echo "=== Node/npm versions ==="
+          node --version
+          npm --version
+          echo "=== Electron cache paths ==="
+          echo "ELECTRON_CACHE: $env:ELECTRON_CACHE"
+          echo "LOCALAPPDATA: $env:LOCALAPPDATA"
+          $cachePath = "$env:LOCALAPPDATA\electron\Cache"
+          if (Test-Path $cachePath) { Get-ChildItem $cachePath } else { echo "No electron cache found at $cachePath" }
+          echo "=== Test direct packager invocation ==="
+          node -e "const {packager} = require('@electron/packager'); packager({dir: '.', platform: 'win32', arch: 'x64', out: 'out-test', overwrite: true, electronVersion: '30.5.1'}).then(r => console.log('SUCCESS:', r)).catch(e => console.error('ERROR:', e.message, e.stack))" 2>&1 | head -30
+
       # Build Windows x64 installer
       - name: Build Electron app - Windows x64
         run: npm run make -- --arch=x64
