@@ -268,9 +268,13 @@ jobs:
       - name: Setup WiX Toolset
         shell: pwsh
         run: |
-          choco install wixtoolset --version=3.14.1 -y --no-progress
-          echo "C:\Program Files (x86)\WiX Toolset v3.14.1\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "WiX Toolset installed and added to PATH"
+          $wixPath = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*\bin" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $wixPath) {
+            choco install wixtoolset -y --no-progress
+            $wixPath = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*\bin" | Select-Object -First 1 -ExpandProperty FullName
+          }
+          echo "Found WiX at: $wixPath"
+          echo $wixPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Set version from input or tag
         id: version
