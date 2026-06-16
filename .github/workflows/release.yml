@@ -316,7 +316,7 @@ jobs:
           $cachePath = "$env:LOCALAPPDATA\electron\Cache"
           if (Test-Path $cachePath) { Get-ChildItem $cachePath } else { echo "No electron cache found at $cachePath" }
           echo "=== Test direct packager invocation ==="
-          node -e "const {packager} = require('@electron/packager'); packager({dir: '.', platform: 'win32', arch: 'x64', out: 'out-test', overwrite: true, electronVersion: '30.5.1'}).then(r => console.log('SUCCESS:', r)).catch(e => console.error('ERROR:', e.message, e.stack))" 2>&1 | head -30
+          node -e "const {packager} = require('@electron/packager'); packager({dir: '.', platform: 'win32', arch: 'x64', out: 'out-test', overwrite: true, electronVersion: '30.5.1'}).then(r => console.log('SUCCESS:', JSON.stringify(r))).catch(e => console.error('ERROR:', e.message, e.stack))"
 
       # Build Windows x64 installer
       - name: Build Electron app - Windows x64
