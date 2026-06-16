@@ -8,6 +8,7 @@ const packageJson = require('./package.json');
 module.exports = {
   packagerConfig: {
     asar: true,
+    quiet: false,
     appBundleId: 'com.markmcc.roonrandom',
     appCategoryType: 'public.app-category.music',
     icon: 'assets/icon',
