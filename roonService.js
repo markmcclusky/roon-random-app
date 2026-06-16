@@ -1144,11 +1144,7 @@ export async function getSubgenres(genreTitle) {
     const items = genrePage.items || [];
 
     for (const item of items) {
-      if (
-        item.hint === 'list' &&
-        item.subtitle &&
-        item.subtitle.includes('Albums')
-      ) {
+      if (item.title && item.subtitle && item.subtitle.includes('Albums')) {
         // Extract album count
         const albumCountMatch = item.subtitle.match(/(\d+)\s+Albums?/);
         const albumCount = albumCountMatch
@@ -1161,7 +1157,7 @@ export async function getSubgenres(genreTitle) {
             title: item.title,
             albumCount,
             parentGenre: genreTitle,
-            item_key: item.item_key, // Store for later navigation
+            item_key: item.item_key,
           });
         }
       }
@@ -1335,7 +1331,6 @@ async function navigateToGenreAlbums(root, genreFilters) {
     const subgenreItem = (parentPage.items || []).find(
       item =>
         (item.title || '').toLowerCase() === subgenreTitle &&
-        item.hint === 'list' &&
         item.subtitle &&
         item.subtitle.includes('Albums')
     );

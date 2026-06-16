@@ -462,6 +462,10 @@ function useRoon() {
     }
   }
 
+  async function getSubgenres(genreTitle) {
+    return await window.roon.getSubgenres(genreTitle);
+  }
+
   // Return public API
   return {
     // State
@@ -474,6 +478,7 @@ function useRoon() {
 
     // Functions
     refreshGenres,
+    getSubgenres,
     refreshProfiles,
     refreshNowPlaying, // NEW
     setFilters,

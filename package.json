@@ -1,6 +1,6 @@
 {
   "name": "roon-random-app",
-  "version": "1.8.0",
+  "version": "1.8.5",
   "productName": "Roon Random Album",
   "description": "Cross-platform desktop app for playing random Roon albums with intelligent filtering, genre selection, and artist exclusion",
   "main": "main.js",
