@@ -5,6 +5,8 @@
  * genre filtering, transport controls, and activity tracking.
  */
 
+import { roonClient } from './roonClient.js';
+
 import { extractPrimaryArtist, createActivityKey } from './utils/formatting.js';
 import { DiceIcon, FilterIcon } from './components/Icons.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
@@ -74,7 +76,7 @@ function useRoon() {
    */
   async function refreshState() {
     try {
-      const currentState = await window.roon.getState();
+      const currentState = await roonClient.getState();
       setState(currentState);
     } catch (error) {
       console.error('Failed to get Roon state:', error);
@@ -86,7 +88,7 @@ function useRoon() {
    */
   async function refreshZones() {
     try {
-      const zoneList = await window.roon.listZones();
+      const zoneList = await roonClient.listZones();
       setZones(Array.isArray(zoneList) ? zoneList : []);
     } catch (error) {
       console.error('Failed to list zones:', error);
@@ -100,7 +102,7 @@ function useRoon() {
     setOperation('loadingGenres', true);
     try {
       console.log('[UI] refreshGenres() called');
-      const genreList = await window.roon.listGenres();
+      const genreList = await roonClient.listGenres();
       setGenres(Array.isArray(genreList) ? genreList : []);
     } catch (error) {
       console.error('Failed to list genres:', error);
@@ -114,7 +116,7 @@ function useRoon() {
    */
   async function refreshNowPlaying() {
     try {
-      const nowPlaying = await window.roon.refreshNowPlaying();
+      const nowPlaying = await roonClient.refreshNowPlaying();
       console.log('[UI] Refreshed now playing:', nowPlaying);
       return nowPlaying;
     } catch (error) {
@@ -128,7 +130,7 @@ function useRoon() {
    */
   async function refreshProfiles() {
     try {
-      const profileList = await window.roon.listProfiles();
+      const profileList = await roonClient.listProfiles();
       setProfiles(Array.isArray(profileList) ? profileList : []);
 
       // Set current profile from the selected one
@@ -149,7 +151,7 @@ function useRoon() {
    */
   async function setFilters(newFilters) {
     try {
-      await window.roon.setFilters(newFilters || {});
+      await roonClient.setFilters(newFilters || {});
       await refreshState();
     } catch (error) {
       console.error('Failed to set filters:', error);
@@ -162,7 +164,7 @@ function useRoon() {
    */
   async function selectZone(zoneId) {
     try {
-      await window.roon.selectZone(zoneId);
+      await roonClient.selectZone(zoneId);
       await refreshState();
     } catch (error) {
       console.error('Failed to select zone:', error);
@@ -176,7 +178,7 @@ function useRoon() {
   async function switchProfile(profileName) {
     setOperation('switchingProfile', true);
     try {
-      await window.roon.switchProfile(profileName);
+      await roonClient.switchProfile(profileName);
       // Genres will need to be refreshed after profile switch
       await refreshGenres(); // This will set loadingGenres
     } catch (error) {
@@ -195,7 +197,7 @@ function useRoon() {
    */
   async function getConnectionSettings() {
     try {
-      return await window.roon.getConnectionSettings();
+      return await roonClient.getConnectionSettings();
     } catch (error) {
       console.error('Failed to get connection settings:', error);
       return { mode: 'auto', host: null, port: 9330 };
@@ -208,8 +210,8 @@ function useRoon() {
    */
   async function setConnectionSettings(settings) {
     try {
-      await window.roon.setConnectionSettings(settings);
-      await window.roon.reconnect();
+      await roonClient.setConnectionSettings(settings);
+      await roonClient.reconnect();
       console.log('[UI] Connection settings updated, reconnecting...');
     } catch (error) {
       console.error('Failed to set connection settings:', error);
@@ -227,7 +229,7 @@ function useRoon() {
   async function playRandomAlbum(selectedGenres) {
     setOperation('playingAlbum', true);
     try {
-      const result = await window.roon.playRandomAlbum(selectedGenres);
+      const result = await roonClient.playRandomAlbum(selectedGenres);
       return result;
     } catch (error) {
       console.error('Failed to play random album:', error);
@@ -246,7 +248,7 @@ function useRoon() {
   async function playAlbumByName(albumTitle, artistName) {
     setOperation('playingSpecificAlbum', true);
     try {
-      await window.roon.playAlbumByName(albumTitle, artistName);
+      await roonClient.playAlbumByName(albumTitle, artistName);
     } catch (error) {
       console.error('Failed to play album by name:', error);
       alert(`Error: ${error.message}`);
@@ -264,10 +266,7 @@ function useRoon() {
   async function playRandomAlbumByArtist(artistName, currentAlbum) {
     setOperation('fetchingArtist', true);
     try {
-      return await window.roon.playRandomAlbumByArtist(
-        artistName,
-        currentAlbum
-      );
+      return await roonClient.playRandomAlbumByArtist(artistName, currentAlbum);
     } catch (error) {
       console.error('Failed to play album by artist:', error);
       alert(`Error: ${error.message}`);
@@ -285,7 +284,7 @@ function useRoon() {
    */
   async function transportControl(action) {
     try {
-      await window.roon.transportControl(action);
+      await roonClient.transportControl(action);
     } catch (error) {
       console.error('Transport control failed:', error);
     }
@@ -297,7 +296,7 @@ function useRoon() {
    */
   async function changeVolume(value) {
     try {
-      await window.roon.changeVolume(value);
+      await roonClient.changeVolume(value);
     } catch (error) {
       console.error('Volume change failed:', error);
     }
@@ -309,7 +308,7 @@ function useRoon() {
    */
   async function seek(seconds) {
     try {
-      await window.roon.seek(seconds);
+      await roonClient.seek(seconds);
     } catch (error) {
       console.error('Seek failed:', error);
     }
@@ -335,7 +334,7 @@ function useRoon() {
 
       // Only load profiles/genres if core is already paired
       // Otherwise, handleCorePaired will load them when connection happens
-      const currentState = await window.roon.getState();
+      const currentState = await roonClient.getState();
       if (currentState.paired) {
         console.log(
           '[TIMING] Core already paired, loading profiles and genres'
@@ -370,7 +369,7 @@ function useRoon() {
     })();
 
     // Set up event listener for real-time updates
-    const unsubscribe = window.roon.onEvent(payload => {
+    const unsubscribe = roonClient.onEvent(payload => {
       if (!payload) return;
 
       if (payload.type === 'core') {
@@ -430,7 +429,7 @@ function useRoon() {
    */
   async function clearActivity() {
     try {
-      await window.roon.clearActivity();
+      await roonClient.clearActivity();
       console.log('[UI] Cleared persistent activity');
     } catch (error) {
       console.error('Failed to clear persistent activity:', error);
@@ -443,7 +442,7 @@ function useRoon() {
    */
   async function removeActivity(itemId) {
     try {
-      await window.roon.removeActivity(itemId);
+      await roonClient.removeActivity(itemId);
       console.log('[UI] Removed activity item:', itemId);
     } catch (error) {
       console.error('Failed to remove activity item:', error);
@@ -455,7 +454,7 @@ function useRoon() {
    */
   async function muteToggle() {
     try {
-      await window.roon.muteToggle();
+      await roonClient.muteToggle();
       console.log('[UI] Mute toggle requested');
     } catch (error) {
       console.error('Failed to toggle mute:', error);
@@ -463,7 +462,7 @@ function useRoon() {
   }
 
   async function getSubgenres(genreTitle) {
-    return await window.roon.getSubgenres(genreTitle);
+    return await roonClient.getSubgenres(genreTitle);
   }
 
   // Return public API
@@ -576,7 +575,7 @@ function App() {
 
       if (metadata.image_key) {
         // Fetch album art
-        window.roon.getImage(metadata.image_key).then(dataUrl => {
+        roonClient.getImage(metadata.image_key).then(dataUrl => {
           if (dataUrl) {
             setNowPlaying({
               song: metadata.song,
@@ -605,7 +604,7 @@ function App() {
       }
     }
 
-    const unsubscribe = window.roon.onEvent(handleNowPlayingEvent);
+    const unsubscribe = roonClient.onEvent(handleNowPlayingEvent);
 
     // Cleanup: remove event listener when zone changes or component unmounts
     return () => {
@@ -627,7 +626,7 @@ function App() {
       }));
     }
 
-    const unsubscribe = window.roon.onEvent(handleSeekPositionEvent);
+    const unsubscribe = roonClient.onEvent(handleSeekPositionEvent);
 
     // Cleanup: remove event listener when zone changes or component unmounts
     return () => {
@@ -640,7 +639,7 @@ function App() {
   useEffect(() => {
     async function loadPersistedActivity() {
       try {
-        const persistedActivity = await window.roon.getActivity();
+        const persistedActivity = await roonClient.getActivity();
         console.log(
           '[UI] Loaded persisted activity:',
           persistedActivity?.length || 0,
@@ -658,7 +657,7 @@ function App() {
 
           if (item.imageKey) {
             try {
-              artUrl = await window.roon.getImage(item.imageKey);
+              artUrl = await roonClient.getImage(item.imageKey);
             } catch (error) {
               console.warn(
                 `Failed to load album art for ${item.title}:`,
@@ -734,7 +733,7 @@ function App() {
 
       try {
         // Save to persistent storage
-        const result = await window.roon.addActivity(persistedActivityItem);
+        const result = await roonClient.addActivity(persistedActivityItem);
 
         // Add the generated ID to the UI item
         if (result && result.id) {
@@ -801,7 +800,7 @@ function App() {
       // Use primary artist for activity tracking
       const primaryArtist = extractPrimaryArtist(result.artist);
       const artUrl = result.image_key
-        ? await window.roon.getImage(result.image_key)
+        ? await roonClient.getImage(result.image_key)
         : null;
 
       // Save to persistent storage and update UI
@@ -843,7 +842,7 @@ function App() {
       // Use primary artist for activity tracking too
       const resultPrimaryArtist = extractPrimaryArtist(result.artist);
       const artUrl = result.image_key
-        ? await window.roon.getImage(result.image_key)
+        ? await roonClient.getImage(result.image_key)
         : null;
 
       // Save to persistent storage and update UI
@@ -976,7 +975,7 @@ function App() {
    */
   async function handleUpdateExclusions(newExcludedArtists) {
     try {
-      const currentFilters = await window.roon.getFilters();
+      const currentFilters = await roonClient.getFilters();
       await roon.setFilters({
         ...currentFilters,
         excludedArtists: newExcludedArtists,
