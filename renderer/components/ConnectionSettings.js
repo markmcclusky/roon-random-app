@@ -5,6 +5,8 @@
  * including IP address and port for direct WebSocket connections.
  */
 
+import { roonClient } from '../roonClient.js';
+
 // Get React from window (loaded via CDN)
 const { createElement: e, useState, useEffect } = window.React;
 
@@ -59,7 +61,7 @@ export function ConnectionSettings({
     setTestMessage('Testing connection...');
 
     try {
-      const result = await window.roon.testConnection(
+      const result = await roonClient.testConnection(
         host.trim(),
         parseInt(port, 10)
       );
