@@ -9,7 +9,6 @@
  * - Session management and play history
  */
 
-import { app, safeStorage } from 'electron';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
@@ -40,8 +39,10 @@ const MAX_SESSION_HISTORY = 1000; // Maximum albums to remember in session histo
 const MAX_PAGINATION_ITERATIONS = 100; // Safety limit for pagination loops
 
 // Persisted state (token) storage — lives in a writable, stable location
-const ROON_DATA_DIR = app.getPath('userData'); // e.g. ~/Library/Application Support/Roon Random App
-const ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
+let ROON_DATA_DIR;
+let ROON_CONFIG_PATH;
+let runtime;
+let safeStorage;
 
 // In-memory config cache for synchronous Roon API callbacks
 let configCache = null;
@@ -245,7 +246,6 @@ function loadConfigCacheSync() {
 const EXTENSION_CONFIG = {
   extension_id: 'com.markmcc.roonrandom',
   display_name: 'Roon Random Album',
-  display_version: app.getVersion(),
   publisher: 'Mark McClusky',
   email: 'mark@mcclusky.com',
   website: 'https://github.com/markmcclusky/roon-random-app',
@@ -419,6 +419,7 @@ export function getZoneNowPlaying(zoneId) {
 function createRoonApi() {
   return new RoonApi({
     ...EXTENSION_CONFIG,
+    display_version: runtime.appVersion,
 
     // Persist the pairing token + paired_core_id in userData/config.json
     // These callbacks must be synchronous (Roon API requirement)
@@ -2331,8 +2332,14 @@ export function switchConnectionMode(mode, host = null, port = 9330) {
  * Initializes the Roon service with required dependencies
  * @param {Object} window - Main window instance for IPC
  * @param {Object} storeInstance - Electron store instance
+ * @param {Object} runtimeAdapter - Required dataDirectory, appVersion, and safeStorage capabilities
  */
-export function initialize(window, storeInstance) {
+export function initialize(window, storeInstance, runtimeAdapter) {
+  runtime = runtimeAdapter;
+  ROON_DATA_DIR = runtime.dataDirectory;
+  ROON_CONFIG_PATH = path.join(ROON_DATA_DIR, 'config.json');
+  safeStorage = runtime.safeStorage;
+
   mainWindow = window;
   store = storeInstance;
   connectToRoon();
