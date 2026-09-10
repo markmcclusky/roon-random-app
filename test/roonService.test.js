@@ -10,20 +10,6 @@
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Mock Electron modules before importing roonService
-vi.mock('electron', () => ({
-  app: {
-    getPath: vi.fn(() => '/tmp/test-roon-app'),
-    getVersion: vi.fn(() => '1.6.0'),
-    getName: vi.fn(() => 'Roon Random Album'),
-  },
-  safeStorage: {
-    isEncryptionAvailable: vi.fn(() => false), // Disable encryption for tests
-    encryptString: vi.fn(),
-    decryptString: vi.fn(),
-  },
-}));
-
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
   default: {
@@ -109,7 +95,15 @@ describe('RoonService - Core Business Logic', () => {
       set: vi.fn(),
     };
 
-    roonService.initialize(mockWindow, mockStore);
+    roonService.initialize(mockWindow, mockStore, {
+      dataDirectory: '/tmp/test-roon-app',
+      appVersion: '1.6.0',
+      safeStorage: {
+        isEncryptionAvailable: vi.fn(() => false),
+        encryptString: vi.fn(),
+        decryptString: vi.fn(),
+      },
+    });
   });
 
   afterEach(() => {

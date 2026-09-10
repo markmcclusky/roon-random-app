@@ -6,7 +6,7 @@
  * the main and renderer processes.
  */
 
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, safeStorage } from 'electron';
 import path from 'path';
 import Store from 'electron-store';
 import { fileURLToPath } from 'url';
@@ -18,6 +18,13 @@ import { registerIpcHandlers } from './ipcHandlers.js';
 // ES module path resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Electron capabilities supplied to the Roon service.
+const roonRuntime = {
+  dataDirectory: app.getPath('userData'),
+  appVersion: app.getVersion(),
+  safeStorage,
+};
 
 // Application window configuration
 const WINDOW_CONFIG = {
@@ -118,7 +125,7 @@ function handleAppReady() {
 function initializeBackendServices() {
   try {
     // Initialize Roon service with window and store references
-    initializeRoonService(mainWindow, store);
+    initializeRoonService(mainWindow, store, roonRuntime);
 
     // Register all IPC handlers for UI communication
     registerIpcHandlers(store, mainWindow);
